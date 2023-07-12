@@ -25,6 +25,7 @@ extern "C" {
 #endif /* __cplusplus */
 
 /* Includes ------------------------------------------------------------------*/
+#include <stdint.h>
 #include "mx_wifi_conf.h"
 
 
@@ -53,7 +54,6 @@ extern "C" {
 #define MX_SERVICE_NAME_SIZE          (255)
 #define MC_WIFI_INTERFACE_NUM         (2)
 #define MX_WIFI_PING_MAX              (10)
-
 #define MX_WIFI_SCAN_TIMEOUT          (5000)
 
 /**
@@ -65,7 +65,7 @@ enum
   MC_STATION  /**< wifi station mode. */
 };
 
-typedef uint8_t mwifi_if_t; /**< wifi mode. */
+typedef uint8_t mwifi_if_t; /**< wifi mode. ref to @ref mwifi_if_t */
 
 /**
   * @brief Wi-Fi scan mode
@@ -73,17 +73,17 @@ typedef uint8_t mwifi_if_t; /**< wifi mode. */
 enum
 {
   MC_SCAN_PASSIVE = 0,  /**< wifi passive scan mode. */
-  MC_SCAN_ACTIVE = 1    /**< wifi active scan mode.  */
+  MC_SCAN_ACTIVE  = 1   /**< wifi active scan mode.  */
 };
 
-typedef uint8_t mc_wifi_scan_mode_t; /**< wifi scan mode. */
+typedef uint8_t mc_wifi_scan_mode_t; /**< wifi scan mode. ref to @ref mc_wifi_scan_mode_e */
 
 /**
   * @brief Wi-Fi ip address info
   */
 typedef struct
 {
-  char localip[MX_MAX_IP_LEN];  /**< lcoal ip address */
+  char localip[MX_MAX_IP_LEN];  /**< local ip address */
   char netmask[MX_MAX_IP_LEN];  /**< netmask */
   char gateway[MX_MAX_IP_LEN];  /**< gateway ip address */
   char dnserver[MX_MAX_IP_LEN]; /**< dns server ip address */
@@ -94,7 +94,7 @@ typedef struct
   */
 typedef enum
 {
-  EAP_TYPE_TLS = 13, /* RFC 2716 */
+  EAP_TYPE_TLS  = 13, /* RFC 2716 */
   EAP_TYPE_TTLS = 21, /* RFC 5281 */
   EAP_TYPE_PEAP = 25  /* draft-josefsson-pppext-eap-tls-eap-06.txt */
 } EapType;
@@ -114,43 +114,24 @@ typedef struct
 /*******************************************************************************
   * STM32Cube Driver API Defines
   ******************************************************************************/
-/* status code */
-#define MX_WIFI_STATUS_OK           (0)     /**< status code success. */
-#define MX_WIFI_STATUS_ERROR        (-1)    /**< status code common error. */
-#define MX_WIFI_STATUS_TIMEOUT      (-2)    /**< status code timeout. */
-#define MX_WIFI_STATUS_IO_ERROR     (-3)    /**< status code I/O error. */
-#define MX_WIFI_STATUS_PARAM_ERROR  (-4)    /**< status code bad argument error. */
-#define MX_WIFI_STATUS_T            int32_t /**< status code. */
+/**
+  * @brief API operation status code
+  */
+typedef enum mx_wifi_status_e
+{
+  MX_WIFI_STATUS_OK           = (0),     /**< status code success. */
+  MX_WIFI_STATUS_ERROR        = (-1),    /**< status code common error. */
+  MX_WIFI_STATUS_TIMEOUT      = (-2),    /**< status code timeout. */
+  MX_WIFI_STATUS_IO_ERROR     = (-3),    /**< status code I/O error. */
+  MX_WIFI_STATUS_PARAM_ERROR  = (-4)     /**< status code bad argument error. */
+} MX_WIFI_STATUS_T;
 
 /* macro */
 #define MX_WIFI_MAC_SIZE            (6)     /**< max length of MAC address. */
 #define MX_WIFI_SCAN_BUF_SIZE       (2000)  /**< max size of scan buffer. */
 
-#define MIN(a, b)  ( ((a) < (b)) ? (a) : (b))  /**< helper function: get minimum. */
+#define MIN(a, b)  ( ((a) < (b)) ? (a) : (b) )  /**< helper function: get minimum. */
 
-#if 0
-/* IPv6 address states. */
-#define IP6_ADDR_INVALID      0x00
-#define IP6_ADDR_TENTATIVE    0x08
-#define IP6_ADDR_TENTATIVE_1  0x09 /* 1 probe sent  */
-#define IP6_ADDR_TENTATIVE_2  0x0a /* 2 probes sent */
-#define IP6_ADDR_TENTATIVE_3  0x0b /* 3 probes sent */
-#define IP6_ADDR_TENTATIVE_4  0x0c /* 4 probes sent */
-#define IP6_ADDR_TENTATIVE_5  0x0d /* 5 probes sent */
-#define IP6_ADDR_TENTATIVE_6  0x0e /* 6 probes sent */
-#define IP6_ADDR_TENTATIVE_7  0x0f /* 7 probes sent */
-#define IP6_ADDR_VALID        0x10
-#define IP6_ADDR_PREFERRED    0x30
-#define IP6_ADDR_DEPRECATED   0x50
-#endif /* 0 */
-
-/*
-#define ip6_addr_isinvalid(addr_state) (addr_state == IP6_ADDR_INVALID)
-#define ip6_addr_istentative(addr_state) (addr_state & IP6_ADDR_TENTATIVE)
-#define ip6_addr_isvalid(addr_state) (addr_state & IP6_ADDR_VALID)
-#define ip6_addr_ispreferred(addr_state) (addr_state == IP6_ADDR_PREFERRED)
-#define ip6_addr_isdeprecated(addr_state) (addr_state == IP6_ADDR_DEPRECATED)
-  */
 
 /**
   * @brief Security settings for wifi network
@@ -195,6 +176,8 @@ typedef struct
   uint8_t Product_Name[MX_WIFI_PRODUCT_NAME_SIZE];/**< product name. */
   uint8_t Product_ID[MX_WIFI_PRODUCT_ID_SIZE];    /**< product ID. */
   uint8_t FW_Rev[MX_WIFI_FW_REV_SIZE];            /**< firmware version. */
+
+  /* Wi-Fi MAC address */
   uint8_t MAC[MX_WIFI_MAC_SIZE];                  /**< Wi-Fi MAC address. */
 } MX_WIFI_SystemInfo_t;
 
@@ -258,11 +241,17 @@ typedef enum
 
 /**
   * @brief Prototype of FOTA status callback function
+  * @param status FOTA status
+  * @param user_args arguments set by user when call MX_WIFI_FOTA_start
+  * @return none
   */
 typedef void (*mx_wifi_fota_status_cb_t)(mx_wifi_fota_status_e status, uint32_t user_args);
 
 /**
   * @brief Prototype of netlink input callback function for network bypass mode
+  * @param pbuf network data buffer
+  * @param user_args arguments set by user when call MX_WIFI_Network_bypass_mode_set
+  * @return none
   */
 typedef void (*mx_wifi_netlink_input_cb_t)(mx_buf_t *pbuf, void *user_args);
 
@@ -321,28 +310,26 @@ typedef struct
 
 
 /**
-  * @brief Register low level IO interface.
+  * @brief Register low level IO interface, UART or SPI
   * @param Obj wifi object handle.
-  * @param IO_Init IO init function
+  * @param IO_Init IO init function for low level data transfer, UART or SPI
   * @param IO_DeInit IO de-init function
   * @param IO_Delay IO delay function in ms
   * @param IO_Send IO send data function
   * @param IO_Receive IO receive data function
-  *
-  * @return result
+  * @return status code
   * @retval MX_WIFI_STATUS_OK success
-  * @retval others failure
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_RegisterBusIO(MX_WIFIObject_t *Obj,
                                        IO_Init_Func IO_Init, IO_DeInit_Func IO_DeInit, IO_Delay_Func IO_Delay,
                                        IO_Send_Func IO_Send, IO_Receive_Func IO_Receive);
 /**
-  * @brief Reset wifi module by hardware IO.
+  * @brief Reset wifi module by hardware IO. RESET IO set in low level IO configuration.
   * @param Obj wifi object handle.
-  *
-  * @return result
+  * @return status code
   * @retval MX_WIFI_STATUS_OK success
-  * @retval others failure
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_HardResetModule(MX_WIFIObject_t *Obj);
 
@@ -366,16 +353,20 @@ typedef enum
 } MX_WIFI_InitMode_t;
 
 /**
-  * @brief  Initialize WIFI module and get module fw & mac info.
+  * @brief  Initialize WIFI module and get module firmware version and Wi-Fi MAC info.
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_Init(MX_WIFIObject_t *Obj);
 
 /**
   * @brief  DeInitialize WIFI module.
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_DeInit(MX_WIFIObject_t *Obj);
 
@@ -383,7 +374,9 @@ MX_WIFI_STATUS_T MX_WIFI_DeInit(MX_WIFIObject_t *Obj);
   * @brief  Change default Timeout for wifi cmd.
   * @param  Obj: pointer to module handle
   * @param  Timeout: Timeout in mS
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_SetTimeout(MX_WIFIObject_t *Obj, uint32_t Timeout);
 
@@ -391,7 +384,9 @@ MX_WIFI_STATUS_T MX_WIFI_SetTimeout(MX_WIFIObject_t *Obj, uint32_t Timeout);
   * @brief  Yield data from Wi-Fi module.
   * @param  Obj: pointer to module handle
   * @param  timeout: yield timeout in ms
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   * @note   This will be called periodically
   */
 MX_WIFI_STATUS_T MX_WIFI_IO_YIELD(MX_WIFIObject_t *Obj, uint32_t timeout);
@@ -409,15 +404,11 @@ MX_WIFI_STATUS_T MX_WIFI_IO_YIELD(MX_WIFIObject_t *Obj, uint32_t timeout);
 /**
   * @brief Network bypass interface index
   */
-enum
+enum mwifi_if_index_e
 {
   STATION_IDX = 0,
-  SOFTAP_IDX = 1   /* NOT SUPPORTED NOW */
+  SOFTAP_IDX  = 1
 };
-
-
-MX_WIFIObject_t *wifi_obj_get(void);
-
 
 
 #if (MX_WIFI_NETWORK_BYPASS_MODE == 1)
@@ -427,7 +418,9 @@ MX_WIFIObject_t *wifi_obj_get(void);
   * @param  enable: 0=disable, 1=enable
   * @param  netlink_input_callbck: input data callback function
   * @param  user_args: user arguments for callback function
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_Network_bypass_mode_set(MX_WIFIObject_t *Obj, int32_t enable,
                                                  mx_wifi_netlink_input_cb_t netlink_input_callbck, void *user_args);
@@ -435,12 +428,12 @@ MX_WIFI_STATUS_T MX_WIFI_Network_bypass_mode_set(MX_WIFIObject_t *Obj, int32_t e
 /**
   * @brief  Network bypass mode data output
   * @param  Obj: pointer to module handle
-  * @param  pbuf: pbuf data to send
-  * @param  size: pbuf size
   * @param  data: pbuf payload
   * @param  len:  payload len
-  * @param  interface: STATION_IDX, SOFTAP_IDX(not supported now)
-  * @retval Operation Status.
+  * @param  interface: STATION_IDX, SOFTAP_IDX
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_Network_bypass_netlink_output(MX_WIFIObject_t *Obj, void *data,
                                                        int32_t len,
@@ -449,28 +442,23 @@ MX_WIFI_STATUS_T MX_WIFI_Network_bypass_netlink_output(MX_WIFIObject_t *Obj, voi
 
 
 /**
-  * @brief   set powersave onoff for wifi station mode.
-  * @param   Obj: pointer to module handle
-  * @param   ps_onoff: 0 -- powersave off, 1 -- powersave on
-  * @retval  Operation Status.
-  */
-int32_t MX_WIFI_station_powersave(MX_WIFIObject_t *Obj, int32_t ps_onoff);
-
-
-/**
   * @} **
   */
 
-enum
+/**
+  * @brief Wi-Fi events
+  */
+enum mwifi_event_e
 {
-  MWIFI_EVENT_NONE        = 0x00, /* invalid event */
+  MWIFI_EVENT_NONE        = 0x00, /**< invalid event */
   MWIFI_EVENT_STA_DOWN    = 0x01, /**< Wi-Fi station down event. */
   MWIFI_EVENT_STA_UP      = 0x02, /**< Wi-Fi station up event. */
   MWIFI_EVENT_STA_GOT_IP  = 0X03, /**< Wi-Fi station got ip event. */
   MWIFI_EVENT_AP_DOWN     = 0x04, /**< Wi-Fi softap down event. */
   MWIFI_EVENT_AP_UP       = 0x05, /**< Wi-Fi softap up event. */
 };
-typedef uint8_t mwifi_status_t;
+
+typedef uint8_t mwifi_status_t;   /**< wifi status event. ref to @ref mwifi_event_e */
 
 /**
   * @defgroup MX_WIFI_BASIC Station
@@ -496,7 +484,9 @@ typedef struct
 /**
   * @brief  Reset the module by Software.
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_ResetModule(MX_WIFIObject_t *Obj);
 
@@ -504,7 +494,9 @@ MX_WIFI_STATUS_T MX_WIFI_ResetModule(MX_WIFIObject_t *Obj);
   * @brief  Reset To factory defaults.
   * @param  Obj: pointer to module handle
   * @note   NOT USED NOW
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_ResetToFactoryDefault(MX_WIFIObject_t *Obj);
 
@@ -513,22 +505,26 @@ MX_WIFI_STATUS_T MX_WIFI_ResetToFactoryDefault(MX_WIFIObject_t *Obj);
   * @param  Obj: pointer to module handle
   * @param  version: buffer pointer to receive the version string.
   * @param  size: length of the buffer, max size 24Bytes.
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_GetVersion(MX_WIFIObject_t *Obj, uint8_t *version, uint32_t size);
 
 /**
-  * @brief  Get the MAC address of the wifi module.
+  * @brief  Get the MAC address of the wifi station.
   * @param  Obj: pointer to module handle
-  * @param  mac: pointer to the MAC address array, size 6Bytes.
-  * @retval Operation Status.
+  * @param  mac: pointer to buffer to receive the MAC address array, size 6 bytes.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_GetMACAddress(MX_WIFIObject_t *Obj, uint8_t *mac);
 
 /**
-  * @brief  wifi block scan
+  * @brief  wifi scan in blocking mode
   * @param  Obj: pointer to module handle
-  * @param  scan_mode: scan mode
+  * @param  scan_mode: scan mode, active or passive scan.
   * @param  ssid: ssid for active scan(scan specified AP), not used(set NULL) if do passive scan(scan all APs)
   * @param  len:  ssid len of the AP to scan, not used(set 0) if do passive scan
   * @note   This API just start scan,  use @MX_WIFI_Get_scan_result to get the scan result.
@@ -551,29 +547,45 @@ MX_WIFI_STATUS_T MX_WIFI_GetMACAddress(MX_WIFIObject_t *Obj, uint8_t *mac);
   *              }
   *            }
   * @endcode
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_Scan(MX_WIFIObject_t *Obj, mc_wifi_scan_mode_t scan_mode, char *ssid, int32_t len);
 
 /**
-  * @brief  wifi get scan result
+  * @brief  wifi get scan result, call this after MX_WIFI_Scan.
   * @param  Obj: pointer to module handle
-  * @param  results: scan result buffer, contains mwifi_ap_info_t * number
+  * @param  results: scan result buffer, contains mwifi_ap_info_t * number, ordered by time the AP found.
   * @param  number: max ap number to get, max 10
-  * @retval return the real ap number got.
+  * @retval return the real ap number got, 0 ~ max(10).
   * @note   must be called after @MX_WIFI_Scan
   */
 int8_t MX_WIFI_Get_scan_result(MX_WIFIObject_t *Obj, uint8_t *results, uint8_t number);
 
 /**
-  * @brief  Register wifi status changed callback
+  * @brief  Register wifi status changed callback with station interface only.
   * @param  Obj: pointer to module handle
   * @param  cb: wifi status callback function
   * @param  arg: argument pass to callback
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_RegisterStatusCallback(MX_WIFIObject_t *Obj,
                                                 mx_wifi_status_callback_t cb, void *arg);
+
+
+/**
+  * @brief  Register wifi status changed callback with the specific wifi interface(sta/ap), recommended.
+  * @param  Obj: pointer to module handle
+  * @param  cb: wifi status callback function
+  * @param  arg: argument pass to callback
+  * @param  interface: wifi interface STATION or SOFTAP
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
+  */
 MX_WIFI_STATUS_T MX_WIFI_RegisterStatusCallback_if(MX_WIFIObject_t *Obj,
                                                    mx_wifi_status_callback_t cb,
                                                    void *arg,
@@ -582,18 +594,39 @@ MX_WIFI_STATUS_T MX_WIFI_RegisterStatusCallback_if(MX_WIFIObject_t *Obj,
 /**
   * @brief  UnRegister wifi status changed callback
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
+  * @note   work with API MX_WIFI_RegisterStatusCallback
   */
 MX_WIFI_STATUS_T MX_WIFI_UnRegisterStatusCallback(MX_WIFIObject_t *Obj);
-MX_WIFI_STATUS_T MX_WIFI_UnRegisterStatusCallback_if(MX_WIFIObject_t *Obj, mwifi_if_t interface);
+
 
 /**
-  * @brief  Join an Access point.
+  * @brief  UnRegister wifi status changed callback with the specific wifi interface
   * @param  Obj: pointer to module handle
-  * @param  Ssid: the access point id.
-  * @param  Password: the Access point password.
-  * @param  SecType: Security type.
-  * @retval Operation Status.
+  * @param  interface: wifi interface STATION or SOFTAP
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
+  * @note   work with API MX_WIFI_RegisterStatusCallback_if
+  */
+MX_WIFI_STATUS_T MX_WIFI_UnRegisterStatusCallback_if(MX_WIFIObject_t *Obj, mwifi_if_t interface);
+
+
+/**
+  * @brief  Join an Access point, connect in asynchronous mode,
+  *         wifi status will be returned from a callback set by MX_WIFI_RegisterStatusCallback.
+  * @param  Obj: pointer to module handle.
+  * @param  SSID: the access point id, max size 32 bytes.
+  * @param  Password: the Access point password, max size 64 bytes.
+  * @param  SecType: Security type(NOT USE NOW because the module will connect with the security
+  *                   type get from AP by scan).
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
+  * @note   Set wifi status callback by MX_WIFI_RegisterStatusCallback or
+  *         MX_WIFI_RegisterStatusCallback_if before this API.
   */
 MX_WIFI_STATUS_T MX_WIFI_Connect(MX_WIFIObject_t *Obj, const char *SSID,
                                  const char *Password, MX_WIFI_SecurityType_t SecType);
@@ -601,49 +634,66 @@ MX_WIFI_STATUS_T MX_WIFI_Connect(MX_WIFIObject_t *Obj, const char *SSID,
 /**
   * @brief  Join an Access point with WPA-E.
   * @param  Obj: pointer to module handle
-  * @param  Ssid: the access point ID.
+  * @param  SSID: the access point ID.
   * @param  Identity: client identity.
   * @param  Password: client password.
   * @param  attr: extral attributes of EAP method. NULL for default mode EAP-PEAP.
   * @param  ip: Station IP settings, NULL for DHCP mode.
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
+  * @note   Set wifi status callback by MX_WIFI_RegisterStatusCallback or
+  *         MX_WIFI_RegisterStatusCallback_if before this API.
   */
 MX_WIFI_STATUS_T MX_WIFI_EAP_Connect(MX_WIFIObject_t *Obj, const char *SSID,
                                      const char *Identity, const char *Password,
                                      mwifi_eap_attr_t *attr, mwifi_ip_attr_t *ip);
 
 /**
-  * @brief  Disconnect from a network.
+  * @brief  Disconnect from a station network.
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_Disconnect(MX_WIFIObject_t *Obj);
 
 /**
-  * @brief  Join an Access point with WPS (PUSH-BUTTON) mode.
-  * @retval Operation Status.
+  * @brief  Join an Access point with WPS (PUSH-BUTTON only) mode.
+  *         Connect in asynchronous mode, wifi status will be returned from a callback set by
+  *         MX_WIFI_RegisterStatusCallback.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
+  * @note   Set wifi status callback by MX_WIFI_RegisterStatusCallback or
+  *         MX_WIFI_RegisterStatusCallback_if before this API.
   */
 MX_WIFI_STATUS_T MX_WIFI_WPS_Connect(MX_WIFIObject_t *Obj);
 
 /**
   * @brief  Stop WPS connect.
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_WPS_Stop(MX_WIFIObject_t *Obj);
 
 /**
   * @brief  Check whether the module is connected to an access point.
-  * @retval link status 1: connected, otherwise not connect.
+  * @param  Obj: pointer to module handle
+  * @retval link status 1: connected, otherwise not connected.
   */
 int8_t MX_WIFI_IsConnected(MX_WIFIObject_t *Obj);
 
 /**
   * @brief  Get the local IPv4 address of the wifi module.
   * @param  Obj: pointer to module handle
-  * @param  ipaddr: pointer to the IP address array(4 bytes).
-  * @param  wifi_if: wifi mode(station or softap).
-  * @retval Operation Status.
+  * @param  ipaddr: pointer to buffer to receive the IP address array(4 bytes).
+  * @param  wifi_if: wifi interface(station or softap).
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_GetIPAddress(MX_WIFIObject_t *Obj, uint8_t *ipaddr, mwifi_if_t wifi_if);
 
@@ -652,8 +702,10 @@ MX_WIFI_STATUS_T MX_WIFI_GetIPAddress(MX_WIFIObject_t *Obj, uint8_t *ipaddr, mwi
   * @param  Obj: pointer to module handle
   * @param  ipaddr6: buf to the IPv6 address array(16 bytes).
   * @param  addr_num: index of the IPv6 address (index: 0/1/2).
-  * @param  wifi_if: wifi mode(station or softap).
-  * @retval Operation Status.
+  * @param  wifi_if: wifi interface(station or softap).
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_GetIP6Address(MX_WIFIObject_t *Obj, uint8_t *ipaddr6, int32_t addr_num, mwifi_if_t wifi_if);
 
@@ -661,8 +713,8 @@ MX_WIFI_STATUS_T MX_WIFI_GetIP6Address(MX_WIFIObject_t *Obj, uint8_t *ipaddr6, i
   * @brief  Get the local IPv6 address state of the wifi module.
   * @param  Obj: pointer to module handle
   * @param  addr_num: index of the IPv6 address (index: 0/1/2).
-  * @param  wifi_if: wifi mode(station or softap).
-  * @retval IPV6 address State, error if < 0
+  * @param  wifi_if: wifi interface(station or softap).
+  * @retval IPV6 address State, error if < 0, error code @ref mx_wifi_status_e
   */
 int32_t MX_WIFI_GetIP6AddressState(MX_WIFIObject_t *Obj, int32_t addr_num, mwifi_if_t wifi_if);
 
@@ -693,17 +745,23 @@ typedef struct
 #pragma pack()
 
 /**
-  * @brief  Start softAP(miniAP) mode
+  * @brief  Start softAP (miniAP) mode
+  *         Asynchronous mode, wifi status will be returned from a callback set by MX_WIFI_RegisterStatusCallback.
   * @param  Obj: pointer to module handle
   * @param  ap_settings: softAP settings.
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_StartAP(MX_WIFIObject_t *Obj, MX_WIFI_APSettings_t *ap_settings);
 
 /**
   * @brief  Stop softAP(miniAP) mode
+  *         Asynchronous mode, wifi status will be returned from a callback set by MX_WIFI_RegisterStatusCallback.
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 MX_WIFI_STATUS_T MX_WIFI_StopAP(MX_WIFIObject_t *Obj);
 
@@ -711,7 +769,7 @@ MX_WIFI_STATUS_T MX_WIFI_StopAP(MX_WIFIObject_t *Obj);
   * @} **
   */
 
-#if MX_WIFI_NETWORK_BYPASS_MODE == 0
+#if (MX_WIFI_NETWORK_BYPASS_MODE == 0)
 
 /**
   * @defgroup WIFI_SOCKET Socket
@@ -809,7 +867,7 @@ struct addrinfo
 #define SOCK_DGRAM      2
 #define SOCK_RAW        3
 
-#define  SOL_SOCKET  0xfff    /* options for socket level */
+#define SOL_SOCKET      0xfff    /* options for socket level */
 
 #define AF_UNSPEC       0
 #define AF_INET         2
@@ -908,7 +966,9 @@ int32_t MX_WIFI_Socket_create(MX_WIFIObject_t *Obj, int32_t domain, int32_t type
   * @param  optname: option to set
   * @param  optvalue: value buffer for the option
   * @param  optlen: length of the option value
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_Socket_setsockopt(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t level,
                                   int32_t optname, const void *optvalue, int32_t optlen);
@@ -921,7 +981,9 @@ int32_t MX_WIFI_Socket_setsockopt(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t 
   * @param  optname: option to set
   * @param  optvalue: buffer pointer of value of the option
   * @param  optlen: buffer pointer of length of the option value
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_Socket_getsockopt(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t level,
                                   int32_t optname, void *optvalue, uint32_t *optlen);
@@ -973,7 +1035,9 @@ int32_t MX_WIFI_Socket_connect(MX_WIFIObject_t *Obj, int32_t sockfd, const struc
   *        0    Stop receiving data for this socket;
   *        1    Stop trying to transmit data from this socket
   *        2    Stop all transmit from this socket
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_Socket_shutdown(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t mode);
 
@@ -981,7 +1045,9 @@ int32_t MX_WIFI_Socket_shutdown(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t mo
   * @brief  Socket close.
   * @param  Obj: pointer to module handle
   * @param  sockfd: socket fd
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_Socket_close(MX_WIFIObject_t *Obj, int32_t sockfd);
 
@@ -992,7 +1058,7 @@ int32_t MX_WIFI_Socket_close(MX_WIFIObject_t *Obj, int32_t sockfd);
   * @param  buf: send data buffer
   * @param  len: length of send data
   * @param  flags: zero for MXOS
-  * @retval Number of bytes sent, return < 0 if failed.
+  * @retval Number of bytes sent, return < 0 if failed, error code @ref mx_wifi_status_e
   */
 int32_t MX_WIFI_Socket_send(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf, int32_t len, int32_t flags);
 
@@ -1003,7 +1069,7 @@ int32_t MX_WIFI_Socket_send(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf, 
   * @param  buf: recv buffer
   * @param  len: length of recv buffer
   * @param  flags: zero for MXOS
-  * @retval Number of bytes received, return < 0 if failed.
+  * @retval Number of bytes received, return < 0 if failed, error code @ref mx_wifi_status_e
   */
 int32_t MX_WIFI_Socket_recv(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf, int32_t len, int32_t flags);
 
@@ -1234,14 +1300,18 @@ struct mc_mdns_service
   * @param  Obj: pointer to module handle
   * @param  domain: domain of service
   * @param  name: hostname
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_MDNS_start(MX_WIFIObject_t *Obj, const char *domain, char *hostname);
 
 /**
   * @brief  stop mDNS service.
   * @param  Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_MDNS_stop(MX_WIFIObject_t *Obj);
 
@@ -1250,7 +1320,9 @@ int32_t MX_WIFI_MDNS_stop(MX_WIFIObject_t *Obj);
   * @param  Obj: pointer to module handle
   * @param  service: service to announce
   * @param  interface: wifi interface
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_MDNS_announce_service(MX_WIFIObject_t *Obj, struct mc_mdns_service *service, mwifi_if_t interface);
 
@@ -1281,11 +1353,13 @@ int32_t MX_WIFI_MDNS_deannounce_service_all(MX_WIFIObject_t *Obj, mwifi_if_t int
 int32_t MX_WIFI_MDNS_iface_state_change(MX_WIFIObject_t *Obj, mwifi_if_t interface, enum iface_state state);
 
 /**
-  * @brief  Set new host name, use mdns_iface_state_change(interface, REANNOUNCE) to anounce
+  * @brief  Set new host name, use mdns_iface_state_change(interface, REANNOUNCE) to announce
   *         the new host name.
   * @param  Obj: pointer to module handle
   * @param  hostname: new hostname
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_MDNS_set_hostname(MX_WIFIObject_t *Obj, char *hostname);
 
@@ -1295,7 +1369,9 @@ int32_t MX_WIFI_MDNS_set_hostname(MX_WIFIObject_t *Obj, char *hostname);
   * @param  service: mDNS service
   * @param  keyvals: new txt record string
   * @param  separator: the separator used to separate individual key value pairs
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_MDNS_set_txt_rec(MX_WIFIObject_t *Obj, struct mc_mdns_service *service, char *keyvals,
                                  char separator);
@@ -1320,7 +1396,7 @@ typedef void *mtls_t;
   */
 enum
 {
-  SSL_V3_MODE   = 1, /**< SSL V3 */
+  SSL_V3_MODE   = 1, /**< SSL V3   */
   TLS_V1_0_MODE = 2, /**< TLS V1.0 */
   TLS_V1_1_MODE = 3, /**< TLS V1.1 */
   TLS_V1_2_MODE = 4  /**< TLS V1.2 */
@@ -1332,7 +1408,9 @@ typedef uint8_t mtls_ver_t;
   * @brief  set the TLS protocol version.
   * @param  Obj: pointer to module handle
   * @param  version: TLS protocol version
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   * @note   This function should be called before TLS is ready to function (before
   *         mtls_connect and mtls_accept is called by application ).
   */
@@ -1343,7 +1421,9 @@ int32_t MX_WIFI_TLS_set_ver(MX_WIFIObject_t *Obj, mtls_ver_t version);
   * @param   Obj: pointer to module handle
   * @param   client_cert: Point to buffer of client cert.
   * @param   cert_len: length of the client cert.
-  * @retval  Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_TLS_set_clientCertificate(MX_WIFIObject_t *Obj, uint8_t *client_cert, uint16_t cert_len);
 
@@ -1352,7 +1432,9 @@ int32_t MX_WIFI_TLS_set_clientCertificate(MX_WIFIObject_t *Obj, uint8_t *client_
   * @param   Obj: pointer to module handle
   * @param   client_private_key: Point to buffer of client private key.
   * @param   key_len: length of the client cert.
-  * @retval  Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_TLS_set_clientPrivateKey(MX_WIFIObject_t *Obj, uint8_t *client_private_key, uint16_t key_len);
 
@@ -1361,7 +1443,7 @@ int32_t MX_WIFI_TLS_set_clientPrivateKey(MX_WIFIObject_t *Obj, uint8_t *client_p
   * @param   Obj: pointer to module handle
   * @details This function is called on the client side and initiates an TLS/TLS handshake with a
   *              server.  When this function is called, the underlying communication channel has already
-  *              been set up. This function is called after TCP 3-way handshak finished.
+  *              been set up. This function is called after TCP 3-way handshake finished.
   * @param   domain: Specifies a communication domain
   * @param   type: Specifies the communication semantics.
   * @param   protocol: specifies a particular protocol to be used with the socket.
@@ -1379,7 +1461,7 @@ int32_t MX_WIFI_TLS_connect(MX_WIFIObject_t *Obj, int32_t domain, int32_t type, 
   * @param   Obj: pointer to module handle
   * @details This function is called on the client side and initiates an TLS/TLS handshake with a
   *              server.  When this function is called, the underlying communication channel has already
-  *              been set up. This function is called after TCP 3-way handshak finished.
+  *              been set up. This function is called after TCP 3-way handshake finished.
   * @param   sni_servername: Specifies the SNI servername
   * @param   sni_servername_len: Specifies the SNI servername length, max size MX_TLS_SNI_SERVERNAME_SIZE
   * @param   addr: Point to the target address to be connected
@@ -1398,7 +1480,7 @@ int32_t MX_WIFI_TLS_connect_sni(MX_WIFIObject_t *Obj, const char *sni_servername
   * @param   data: Point to data to send.
   * @param   len: data length.
   * @retval  On success, return the number of bytes sent.  On error,
-  *             error code (< 0) is returned.
+  *          error code (< 0) is returned, ref to @ref mx_wifi_status_e
   */
 int32_t MX_WIFI_TLS_send(MX_WIFIObject_t *Obj, mtls_t tls, void *data, int32_t len);
 
@@ -1409,7 +1491,7 @@ int32_t MX_WIFI_TLS_send(MX_WIFIObject_t *Obj, mtls_t tls, void *data, int32_t l
   * @param   data: Point to buffer to receive TLS data.
   * @param   len: max receive buffer length.
   * @retval  On success, return the number of bytes received.  On error,
-  *             error code (< 0) is returned.
+  *          error code (< 0) is returned, ref to @ref mx_wifi_status_e
   */
 int32_t MX_WIFI_TLS_recv(MX_WIFIObject_t *Obj, mtls_t tls, void *buf, int32_t len);
 
@@ -1417,7 +1499,9 @@ int32_t MX_WIFI_TLS_recv(MX_WIFIObject_t *Obj, mtls_t tls, void *buf, int32_t le
   * @brief   Close the TLS session, release resource.
   * @param   Obj: pointer to module handle
   * @param   tls: Point to the TLS context.
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_TLS_close(MX_WIFIObject_t *Obj, mtls_t tls);
 
@@ -1426,7 +1510,9 @@ int32_t MX_WIFI_TLS_close(MX_WIFIObject_t *Obj, mtls_t tls);
   * @param   Obj: pointer to module handle
   * @param   tls: Point to the TLS context.
   * @param   nonblock: true - nonblock, flase - block
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_TLS_set_nonblock(MX_WIFIObject_t *Obj, mtls_t tls, int32_t nonblock);
 
@@ -1445,14 +1531,18 @@ int32_t MX_WIFI_TLS_set_nonblock(MX_WIFIObject_t *Obj, mtls_t tls, int32_t nonbl
 /**
   * @brief   Start webserver.
   * @param   Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_Webserver_start(MX_WIFIObject_t *Obj);
 
 /**
   * @brief   Stop webserver.
   * @param   Obj: pointer to module handle
-  * @retval Operation Status.
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
   */
 int32_t MX_WIFI_Webserver_stop(MX_WIFIObject_t *Obj);
 
@@ -1460,7 +1550,6 @@ int32_t MX_WIFI_Webserver_stop(MX_WIFIObject_t *Obj);
 /**
   * @} **
   */
-
 
 /**
   * @defgroup MX_WIFI_FOTA FOTA
@@ -1484,13 +1573,25 @@ int32_t MX_WIFI_FOTA_start(MX_WIFIObject_t *Obj, const char *url, const char *md
   * @} **
   */
 
+#endif /* MX_WIFI_NETWORK_BYPASS_MODE */
+
 /**
   * @defgroup MX_WIFI_STATION_POWERSAVE
   * @brief Wi-Fi station powersave API
   * @{ **
   */
 
-#endif /* MX_WIFI_NETWORK_BYPASS_MODE */
+
+/**
+  * @brief  Set powersave onoff for wifi station mode.
+  * @param  Obj: pointer to module handle
+  * @param  ps_onoff: 0 -- powersave off, 1 -- powersave on
+  * @return status code
+  * @retval MX_WIFI_STATUS_OK success
+  * @retval others failure, error code @ref mx_wifi_status_e.
+  */
+int32_t MX_WIFI_station_powersave(MX_WIFIObject_t *Obj, int32_t ps_onoff);
+
 
 /**
   * @} **

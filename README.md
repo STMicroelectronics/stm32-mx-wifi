@@ -1,6 +1,8 @@
-# __BSP MX_WIFI Component__
+# BSP MXCHIP Wi-Fi Component
 
-## __Summary__
+![latest tag](https://img.shields.io/github/v/tag/STMicroelectronics/mx_wifi.svg?color=brightgreen)
+
+## Summary
 
 **STM32Cube** is an STMicroelectronics original initiative to ease developers' life by reducing efforts, time and cost.
 
@@ -15,23 +17,22 @@ Two models of publication are proposed for the STM32Cube embedded software:
    * The monolithic **MCU Package**: all STM32Cube software modules of one STM32 series are present (Drivers, Middleware, Projects, Utilities) in the repository (usual name **STM32Cubexx**, xx corresponding to the STM32 series).
    * The **MCU component**: each STM32Cube software module being part of the STM32Cube MCU Package, is delivered as an individual repository, allowing the user to select and get only the required software functions.
 
-## __Description__
+## Description
 
 This repository contains the Wi-Fi component driver running on STM32 host for the EMW3080B Wi-Fi module from MXCHIP.
 
-## __Contributing__
-
-STM32 customers and users who want to contribute to this component can follow instructions provided in the [CONTRIBUTING](CONTRIBUTING.md) guide.
-
-## __Keywords__
+## Keywords
 
 WIFI, MXCHIP, EMW3080B, STM32Cube
 
-## __Release note__
+## Release note
 
 Details about the content of this release are available in the release note [here](https://htmlpreview.github.io/?https://github.com/STMicroelectronics/mx_wifi/blob/main/Release_Notes.html).  
 
-## __Compatibility information__
+## Compatibility information
 
-Please refer to the repository of the BSP board driver you are using to know which version of this BSP component driver to use. It is crucial that you use a consistent set of versions as indicated.
+Please refer to the repository of the BSP board driver you are using to know which version of this BSP component driver to use. It is **crucial** that you use a consistent set of versions as indicated.
 
+## Contributing
+
+STM32 customers and users who want to contribute to this component can follow instructions provided in the [CONTRIBUTING](CONTRIBUTING.md) guide.

@@ -16,25 +16,30 @@
   ******************************************************************************
   */
 
-
 /* Includes ------------------------------------------------------------------*/
-/*cstat -MISRAC2012-* */
-#include "stdio.h"
-#include "stdlib.h"
-/*cstat +MISRAC2012-* */
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include <inttypes.h>
 
 #include "mx_wifi_conf.h"
 #include "mx_wifi_slip.h"
 #include "mx_wifi_ipc.h"
 
-/* debug function */
+
+
 #ifdef MX_WIFI_SLIP_DEBUG
-#define DEBUG_LOG(M, ...)  printf((M), ##__VA_ARGS__)
+#define DEBUG_LOG(...)       printf(__VA_ARGS__) /*;*/
 #else
 #define DEBUG_LOG(M, ...)
 #endif /* MX_WIFI_SLIP_DEBUG */
 
 #define DEBUG_WARNING(...)
+
+#define DEBUG_ERROR(...)     printf(__VA_ARGS__) /*;*/
+
 /* slip buffer number */
 #define SLIP_BUFFER_SIZE        (MIPC_PKT_MAX_SIZE + 100)
 
@@ -114,7 +119,7 @@ mx_buf_t *slip_input_byte(uint8_t data)
       nbuf = MX_NET_BUFFER_ALLOC(SLIP_BUFFER_SIZE);
       if (nbuf == NULL)
       {
-        DELAYms(1);
+        DELAY_MS(1);
         if (true == first_miss)
         {
           first_miss = false;
@@ -198,6 +203,6 @@ mx_buf_t *slip_input_byte(uint8_t data)
 RESET:
   slip_index = 0;
   slip_state = SLIP_STATE_IDLE;
+
   return outgoing_nbuf;
 }
-

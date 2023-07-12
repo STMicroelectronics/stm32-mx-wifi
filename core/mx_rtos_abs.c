@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    mx_rtos_abs.c
   * @author  MCD Application Team
-  * @brief   Header for mx_wifi module
+  * @brief   mx_wifi CMSIS RTOS abstraction module
   ******************************************************************************
   * @attention
   *
@@ -50,7 +50,7 @@ void *fifo_get(osMessageQId queue, uint32_t timeout)
   }
   return p;
 #else
-  osStatus_t status = osMessageQueueGet(queue, &p, 0, timeout);
+  osStatus_t status = osMessageQueueGet(queue, &p, NULL, timeout);
   if (status != osOK)
   {
     p = NULL;
@@ -62,10 +62,10 @@ void *fifo_get(osMessageQId queue, uint32_t timeout)
 #else  /* MX_WIFI_USE_CMSIS_OS */
 /* No OS implementation */
 
-/* Declare HAL Tick based on a period of 1 ms. */
-extern uint32_t HAL_GetTick(void);
 
-int32_t noos_sem_wait(volatile uint32_t *sem, uint32_t timeout, void (*idle_func)(uint32_t duration))
+
+
+int32_t noos_sem_wait(__IO uint32_t *sem, uint32_t timeout, void (*idle_func)(uint32_t duration))
 {
   int32_t rc = 0;
   uint32_t tickstart = HAL_GetTick();
@@ -105,7 +105,7 @@ int32_t noos_fifo_init(noos_queue_t **qret, uint16_t len)
       q->idx = 0;
       q->rd = 0;
       q->wr = 0;
-      q->fifo = (void **) MX_WIFI_MALLOC(sizeof(void *) * (len + 1));
+      q->fifo = (void **) MX_WIFI_MALLOC(sizeof(void *) * (len + 1U));
       if (q->fifo != NULL)
       {
         rc = 0;

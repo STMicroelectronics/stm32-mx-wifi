@@ -18,8 +18,11 @@
 
 
 /* Includes ------------------------------------------------------------------*/
+#include <string.h>
+#include <stdbool.h>
 #include "mx_wifi.h"
 #include "core/mx_wifi_ipc.h"
+#include "io_pattern/mx_wifi_io.h"
 
 /* Private defines -----------------------------------------------------------*/
 
@@ -55,7 +58,11 @@ int32_t mc_select_ret_value;
 #endif /* 0 */
 
 MX_STAT_DECLARE();
-void _MX_WIFI_RecvThread(THREAD_CONTEXT_TYPE context);
+
+#ifndef MX_WIFI_BARE_OS_H
+static volatile bool RecvThreadQuitFlag;
+static THREAD_DECLARE(MX_WIFI_RecvThreadId);
+#endif /* MX_WIFI_BARE_OS_H */
 
 /* Private data types -----------------------------------------------*/
 typedef struct mx_in_addr
@@ -87,6 +94,11 @@ typedef struct mx_sockaddr_in
 static int32_t mx_aton(const int8_t *ptr, mx_ip_addr_t *addr);
 static int32_t mx_aton_r(const int8_t *cp);
 static int8_t *mx_ntoa(const mx_ip4_addr_t *addr);
+
+#ifndef MX_WIFI_BARE_OS_H
+static void _MX_WIFI_RecvThread(THREAD_CONTEXT_TYPE context);
+#endif /* MX_WIFI_BARE_OS_H */
+
 
 /**
   * @brief  Function description
@@ -257,8 +269,6 @@ static int32_t mx_aton(const int8_t *ptr, mx_ip_addr_t *addr)
 }
 
 
-
-
 static int32_t mx_aton_r(const int8_t *cp)
 {
   mx_ip_addr_t val;
@@ -274,7 +284,6 @@ static int32_t mx_aton_r(const int8_t *cp)
   }
   return (ret);
 }
-
 
 
 /**
@@ -313,16 +322,10 @@ MX_WIFI_STATUS_T MX_WIFI_RegisterBusIO(MX_WIFIObject_t *Obj,
   return rc;
 }
 
-/**
-  * @brief                   reset wifi module by hardware
-  * @param  Obj              wifi object
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_HardResetModule(MX_WIFIObject_t *Obj)
 {
   MX_WIFI_STATUS_T rc;
-  int32_t ret;
-
 
   MX_STAT_INIT();
 
@@ -333,8 +336,8 @@ MX_WIFI_STATUS_T MX_WIFI_HardResetModule(MX_WIFIObject_t *Obj)
   else
   {
     /* reset Wi-Fi by reset pin */
-    ret = Obj->fops.IO_Init(MX_WIFI_RESET);
-    if ((int32_t)0 == ret)
+    const int8_t ret = Obj->fops.IO_Init(MX_WIFI_RESET);
+    if ((int8_t)0 == ret)
     {
       rc = MX_WIFI_STATUS_OK;
     }
@@ -347,12 +350,7 @@ MX_WIFI_STATUS_T MX_WIFI_HardResetModule(MX_WIFIObject_t *Obj)
   return rc;
 }
 
-/**
-  * @brief                   set timeout for mxchip wifi API
-  * @param  Obj              wifi object
-  * @param  Timeout          timeout in ms
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_SetTimeout(MX_WIFIObject_t *Obj, uint32_t Timeout)
 {
   MX_WIFI_STATUS_T rc;
@@ -374,33 +372,36 @@ MX_WIFI_STATUS_T MX_WIFI_SetTimeout(MX_WIFIObject_t *Obj, uint32_t Timeout)
  */
 
 
+#ifndef MX_WIFI_BARE_OS_H
 /**
-  * @brief                   wifi stat recv thread for RTOS
-  * @param  argument         thread arguments
+  * @brief                  WiFi receive thread for RTOS
+  * @param  context         thread arguments
   */
-void _MX_WIFI_RecvThread(THREAD_CONTEXT_TYPE context)
+static void _MX_WIFI_RecvThread(THREAD_CONTEXT_TYPE context)
 {
   MX_WIFIObject_t *Obj = wifi_obj_get();
 
+  RecvThreadQuitFlag = false;
+
   if (NULL != Obj)
   {
-    while (true)
+    while (RecvThreadQuitFlag != true)
     {
       (void)MX_WIFI_IO_YIELD(Obj, 500);
     }
   }
-  /* Delete the Thread */
+
+  RecvThreadQuitFlag = false;
+
+  /* Prepare deletion (depends on implementation). */
   THREAD_TERMINATE();
+
+  /* Delete the Thread. */
+  THREAD_DEINIT(MX_WIFI_RecvThreadId);
 }
+#endif /* MX_WIFI_BARE_OS_H */
 
 
-THREAD_DECLARE(MX_WIFI_RecvThreadId);
-
-/**
-  * @brief                   wifi init
-  * @param  Obj              wifi object
-  * @return MX_WIFI_STATUS_T status
-  */
 MX_WIFI_STATUS_T MX_WIFI_Init(MX_WIFIObject_t *Obj)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
@@ -428,13 +429,9 @@ MX_WIFI_STATUS_T MX_WIFI_Init(MX_WIFIObject_t *Obj)
 
           /* 2a start thread for RTOS implementation  */
 
-          if (THREAD_OK != THREAD_INIT(MX_WIFI_RecvThreadId, _MX_WIFI_RecvThread, NULL,
+          if (THREAD_OK == THREAD_INIT(MX_WIFI_RecvThreadId, _MX_WIFI_RecvThread, NULL,
                                        MX_WIFI_RECEIVED_THREAD_STACK_SIZE,
                                        MX_WIFI_RECEIVED_THREAD_PRIORITY))
-          {
-            ret = MX_WIFI_STATUS_ERROR;
-          }
-          else
           {
             /* 3. get version */
             (void)memset(&(Obj->SysInfo.FW_Rev[0]), 0, MX_WIFI_FW_REV_SIZE);
@@ -477,11 +474,7 @@ MX_WIFI_STATUS_T MX_WIFI_Init(MX_WIFIObject_t *Obj)
   return ret;
 }
 
-/**
-  * @brief                   wifi deinit
-  * @param  Obj              wifi object
-  * @return MX_WIFI_STATUS_T
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_DeInit(MX_WIFIObject_t *Obj)
 {
   MX_WIFI_STATUS_T ret;
@@ -494,7 +487,20 @@ MX_WIFI_STATUS_T MX_WIFI_DeInit(MX_WIFIObject_t *Obj)
   {
     if (Obj->Runtime.interfaces == 1u)
     {
-      (void) THREAD_DEINIT(MX_WIFI_RecvThreadId);
+#ifndef MX_WIFI_BARE_OS_H
+      /* Set thread quit flag to TRUE. */
+      RecvThreadQuitFlag = true;
+
+      /* Wait for thread to terminate. */
+      while (RecvThreadQuitFlag == true)
+      {
+        DELAY_MS(50);
+      }
+#endif /* MX_WIFI_BARE_OS_H */
+
+      /* Delete the Thread (depends on implementation). */
+      THREAD_DEINIT(MX_WIFI_RecvThreadId);
+
       (void)mipc_deinit();
       Obj->fops.IO_DeInit();
       ret = MX_WIFI_STATUS_OK;
@@ -513,12 +519,7 @@ MX_WIFI_STATUS_T MX_WIFI_DeInit(MX_WIFIObject_t *Obj)
   return ret;
 }
 
-/**
-  * @brief                   wifi data yield
-  * @param  Obj              wifi object
-  * @param  timeout          timetou in ms
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_IO_YIELD(MX_WIFIObject_t *Obj, uint32_t timeout)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_OK;
@@ -529,11 +530,7 @@ MX_WIFI_STATUS_T MX_WIFI_IO_YIELD(MX_WIFIObject_t *Obj, uint32_t timeout)
   return ret;
 }
 
-/**
-  * @brief                   wifi software reboot
-  * @param  Obj              wifi object
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_ResetModule(MX_WIFIObject_t *Obj)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
@@ -544,8 +541,9 @@ MX_WIFI_STATUS_T MX_WIFI_ResetModule(MX_WIFIObject_t *Obj)
   }
   else
   {
+    uint16_t rparam_size = 0;
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SYS_REBOOT_CMD, NULL, 0,
-                                          NULL, 0, MX_WIFI_CMD_TIMEOUT))
+                                          NULL, &rparam_size, MX_WIFI_CMD_TIMEOUT))
     {
       ret = MX_WIFI_STATUS_OK;
     }
@@ -553,11 +551,7 @@ MX_WIFI_STATUS_T MX_WIFI_ResetModule(MX_WIFIObject_t *Obj)
   return ret;
 }
 
-/**
-  * @brief                   wifi factory reset
-  * @param  Obj              wifi object
-  * @return MX_WIFI_STATUS_T
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_ResetToFactoryDefault(MX_WIFIObject_t *Obj)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
@@ -568,8 +562,9 @@ MX_WIFI_STATUS_T MX_WIFI_ResetToFactoryDefault(MX_WIFIObject_t *Obj)
   }
   else
   {
+    uint16_t rparam_size = 0;
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SYS_RESET_CMD, NULL, 0,
-                                          NULL, 0, MX_WIFI_CMD_TIMEOUT))
+                                          NULL, &rparam_size, MX_WIFI_CMD_TIMEOUT))
     {
       ret = MX_WIFI_STATUS_OK;
     }
@@ -577,13 +572,7 @@ MX_WIFI_STATUS_T MX_WIFI_ResetToFactoryDefault(MX_WIFIObject_t *Obj)
   return ret;
 }
 
-/**
-  * @brief                   wifi get firmware version
-  * @param  Obj              wifi object
-  * @param  version          buffer to get version
-  * @param  size             buffer size
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_GetVersion(MX_WIFIObject_t *Obj, uint8_t *version, uint32_t size)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
@@ -610,12 +599,7 @@ MX_WIFI_STATUS_T MX_WIFI_GetVersion(MX_WIFIObject_t *Obj, uint8_t *version, uint
   return ret;
 }
 
-/**
-  * @brief                   wifi get MAC address
-  * @param  Obj              wifi object
-  * @param  mac              buffer to get MAC address (6 bytes)
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_GetMACAddress(MX_WIFIObject_t *Obj, uint8_t *mac)
 {
   MX_WIFI_STATUS_T ret;
@@ -645,7 +629,7 @@ MX_WIFI_STATUS_T MX_WIFI_Scan(MX_WIFIObject_t *Obj, mc_wifi_scan_mode_t scan_mod
                               char *ssid, int32_t len)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
-  wifi_scan_cparams_t cparams;
+  wifi_scan_cparams_t cparams = {0};
   wifi_scan_rparams_t *rparams_p = (wifi_scan_rparams_t *)(&(Obj->Runtime.scan_result[0]));
   uint16_t rparams_size;
 
@@ -656,7 +640,6 @@ MX_WIFI_STATUS_T MX_WIFI_Scan(MX_WIFIObject_t *Obj, mc_wifi_scan_mode_t scan_mod
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     memcpy(&(cparams.ssid[0]), ssid, len);
     rparams_size = MX_WIFI_SCAN_BUF_SIZE;
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_WIFI_SCAN_CMD,
@@ -673,13 +656,7 @@ MX_WIFI_STATUS_T MX_WIFI_Scan(MX_WIFIObject_t *Obj, mc_wifi_scan_mode_t scan_mod
   return ret;
 }
 
-/**
-  * @brief                   get wifi scan result
-  * @param  Obj              wifi object
-  * @param  results          buffer to get scan result
-  * @param  number           max ap number to get
-  * @return int8_t           ap number got
-  */
+
 int8_t MX_WIFI_Get_scan_result(MX_WIFIObject_t *Obj, uint8_t *results, uint8_t number)
 {
   int8_t copy_number;
@@ -696,13 +673,7 @@ int8_t MX_WIFI_Get_scan_result(MX_WIFIObject_t *Obj, uint8_t *results, uint8_t n
   return copy_number;
 }
 
-/**
-  * @brief                   register wifi station status event callback
-  * @param  Obj              wifi object
-  * @param  cb               callback function
-  * @param  arg              callback argument
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_RegisterStatusCallback(MX_WIFIObject_t *Obj,
                                                 mx_wifi_status_callback_t cb,
                                                 void *arg)
@@ -722,11 +693,7 @@ MX_WIFI_STATUS_T MX_WIFI_RegisterStatusCallback(MX_WIFIObject_t *Obj,
   return rc;
 }
 
-/**
-  * @brief                   unregister wifi station event callback function
-  * @param  Obj              wifi object
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_UnRegisterStatusCallback(MX_WIFIObject_t *Obj)
 {
   MX_WIFI_STATUS_T rc;
@@ -744,14 +711,7 @@ MX_WIFI_STATUS_T MX_WIFI_UnRegisterStatusCallback(MX_WIFIObject_t *Obj)
   return rc;
 }
 
-/**
-  * @brief                   register wifi event callback for station or AP mode
-  * @param  Obj              wifi object
-  * @param  cb               callback function
-  * @param  arg              callback argument
-  * @param  interface        wifi mode
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_RegisterStatusCallback_if(MX_WIFIObject_t *Obj,
                                                    mx_wifi_status_callback_t cb,
                                                    void *arg,
@@ -781,12 +741,7 @@ MX_WIFI_STATUS_T MX_WIFI_RegisterStatusCallback_if(MX_WIFIObject_t *Obj,
   return rc;
 }
 
-/**
-  * @brief                   register wifi event callback for station or AP mode
-  * @param  Obj              wifi object
-  * @param  interface        wifi mode
-  * @return MX_WIFI_STATUS_T
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_UnRegisterStatusCallback_if(MX_WIFIObject_t *Obj, mwifi_if_t interface)
 {
   MX_WIFI_STATUS_T rc;
@@ -884,11 +839,11 @@ MX_WIFI_STATUS_T MX_WIFI_Connect(MX_WIFIObject_t *Obj, const char *SSID,
                                  const char *Password, MX_WIFI_SecurityType_t SecType)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
-  wifi_connect_cparams_t cparams;
+  wifi_connect_cparams_t cparams = {0};
   int32_t status =  MIPC_CODE_ERROR;
   uint16_t rparams_size;
-  mwifi_ip_attr_t ip_attr;
-  mx_ip4_addr_t net_ipaddr;
+  mwifi_ip_attr_t ip_attr = {0};
+  mx_ip4_addr_t net_ipaddr = {0};
 
   (void)SecType;
 
@@ -907,7 +862,6 @@ MX_WIFI_STATUS_T MX_WIFI_Connect(MX_WIFIObject_t *Obj, const char *SSID,
 
     if ((uint8_t)0 == Obj->NetSettings.DHCP_IsEnabled)
     {
-      (void)memset(&ip_attr, 0, sizeof(mwifi_ip_attr_t));
       (void)memcpy(&net_ipaddr, Obj->NetSettings.IP_Addr, 4);
       (void)memcpy(ip_attr.localip, mx_ntoa(&net_ipaddr), MX_MAX_IP_LEN);
       (void)memcpy(&net_ipaddr, Obj->NetSettings.IP_Mask, 4);
@@ -1041,8 +995,6 @@ MX_WIFI_STATUS_T MX_WIFI_EAP_Connect(MX_WIFIObject_t *Obj, const char *SSID,
 MX_WIFI_STATUS_T MX_WIFI_Disconnect(MX_WIFIObject_t *Obj)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
-  int32_t status =  MIPC_CODE_ERROR;
-  uint16_t rparams_size;
 
   if (NULL == Obj)
   {
@@ -1050,9 +1002,10 @@ MX_WIFI_STATUS_T MX_WIFI_Disconnect(MX_WIFIObject_t *Obj)
   }
   else
   {
-    rparams_size = sizeof(status);
+    int32_t status = MIPC_CODE_ERROR;
+    uint16_t status_size = sizeof(status);
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_WIFI_DISCONNECT_CMD, NULL, 0,
-                                          (uint8_t *)&status, &rparams_size,
+                                          (uint8_t *)&status, &status_size,
                                           15000))  /* disconnect max timeout 15s */
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -1142,7 +1095,7 @@ MX_WIFI_STATUS_T MX_WIFI_WPS_Stop(MX_WIFIObject_t *Obj)
 int8_t MX_WIFI_IsConnected(MX_WIFIObject_t *Obj)
 {
   int8_t ret = 0;
-  wifi_get_linkinof_rparams_t rparams;
+  wifi_get_linkinof_rparams_t rparams = {0};
   uint16_t rparams_size = sizeof(rparams);
   rparams.status = MIPC_CODE_ERROR;
   if (NULL != Obj)
@@ -1161,22 +1114,12 @@ int8_t MX_WIFI_IsConnected(MX_WIFIObject_t *Obj)
   return ret;
 }
 
-/**
-  * @brief                   get wifi IPv4 address
-  * @param  Obj              wifi object
-  * @param  ipaddr           address buffer
-  * @param  wifi_if          wifi interface
-  * @return MX_WIFI_STATUS_T status
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_GetIPAddress(MX_WIFIObject_t *Obj, uint8_t *ipaddr, mwifi_if_t wifi_if)
 {
   MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
-  wifi_get_ip_rparams_t rparams;
+  wifi_get_ip_rparams_t rparams = {0};
   uint16_t rparams_size = sizeof(rparams);
-  int32_t ip;
-  int32_t netmask;
-  int32_t gw;
-  int32_t dns;
 
   rparams.status = MIPC_CODE_ERROR;
 
@@ -1189,18 +1132,22 @@ MX_WIFI_STATUS_T MX_WIFI_GetIPAddress(MX_WIFIObject_t *Obj, uint8_t *ipaddr, mwi
     {
       if (MIPC_CODE_SUCCESS == rparams.status)
       {
-        ip = mx_aton_r((int8_t const *) & (rparams.ip.localip[0]));
-        memcpy(&(Obj->NetSettings.IP_Addr[0]), &ip, 4);
-
-        netmask = mx_aton_r((int8_t const *) & (rparams.ip.netmask[0]));
-        memcpy(&(Obj->NetSettings.IP_Mask[0]), &netmask, 4);
-
-        gw = mx_aton_r((int8_t const *) & (rparams.ip.gateway[0]));
-        memcpy(&(Obj->NetSettings.Gateway_Addr[0]), &gw, 4);
-
-        dns = mx_aton_r((int8_t const *) & (rparams.ip.dnserver[0]));
-        memcpy(&(Obj->NetSettings.DNS1[0]), &dns, 4);
-
+        {
+          int32_t ip = mx_aton_r((int8_t const *) & (rparams.ip.localip[0]));
+          memcpy(&Obj->NetSettings.IP_Addr[0], &ip, 4);
+        }
+        {
+          int32_t netmask = mx_aton_r((int8_t const *) & (rparams.ip.netmask[0]));
+          memcpy(&Obj->NetSettings.IP_Mask[0], &netmask, 4);
+        }
+        {
+          int32_t gw = mx_aton_r((int8_t const *) & (rparams.ip.gateway[0]));
+          memcpy(&Obj->NetSettings.Gateway_Addr[0], &gw, 4);
+        }
+        {
+          int32_t dns = mx_aton_r((int8_t const *) & (rparams.ip.dnserver[0]));
+          memcpy(&Obj->NetSettings.DNS1[0], &dns, 4);
+        }
         (void)memcpy(ipaddr, Obj->NetSettings.IP_Addr, 4);
         ret = MX_WIFI_STATUS_OK;
       }
@@ -1208,6 +1155,7 @@ MX_WIFI_STATUS_T MX_WIFI_GetIPAddress(MX_WIFIObject_t *Obj, uint8_t *ipaddr, mwi
   }
   return ret;
 }
+
 
 /**
   * @brief                   get wifi IPv6 address info
@@ -1344,7 +1292,8 @@ MX_WIFI_STATUS_T MX_WIFI_StopAP(MX_WIFIObject_t *Obj)
   return ret;
 }
 
-#if MX_WIFI_NETWORK_BYPASS_MODE == 0
+
+#if (MX_WIFI_NETWORK_BYPASS_MODE == 0)
 /**
   * @brief  Create a socket.
   * @param  Obj: pointer to module handle
@@ -1356,19 +1305,19 @@ MX_WIFI_STATUS_T MX_WIFI_StopAP(MX_WIFIObject_t *Obj)
 int32_t MX_WIFI_Socket_create(MX_WIFIObject_t *Obj, int32_t domain, int32_t type, int32_t protocol)
 {
   int32_t ret_fd = -1;
-  socket_create_cparams_t cp;
-  socket_create_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  socket_create_cparams_t cp = {0};
+  socket_create_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
   if (NULL != Obj)
   {
     cp.domain = domain;
     cp.type = type;
     cp.protocol = protocol;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_CREATE_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       ret_fd = rp.fd;
@@ -1392,9 +1341,9 @@ int32_t MX_WIFI_Socket_setsockopt(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t 
                                   int32_t optname, const void *optvalue, int32_t optlen)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  socket_setsockopt_cparams_t cp;
-  socket_setsockopt_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  socket_setsockopt_cparams_t cp = {0};
+  socket_setsockopt_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
   rp.status =  MIPC_CODE_ERROR;
   if ((NULL == Obj) || (sockfd < 0) || (NULL == optvalue) || (optlen <= 0))
@@ -1408,10 +1357,11 @@ int32_t MX_WIFI_Socket_setsockopt(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t 
     cp.optname = optname;
     cp.optlen = optlen > sizeof(cp.optval) ? sizeof(cp.optval) : optlen;
     memcpy(&(cp.optval[0]), optvalue, cp.optlen);
-    memset(&rp, 0, sizeof(rp));
+
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_SETSOCKOPT_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.status == MIPC_CODE_SUCCESS)
@@ -1437,10 +1387,10 @@ int32_t MX_WIFI_Socket_getsockopt(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t 
                                   int32_t optname, void *optvalue, uint32_t *optlen)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  socket_getsockopt_cparams_t cp;
-  socket_getsockopt_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
-  rp.status =  MIPC_CODE_ERROR;
+  socket_getsockopt_cparams_t cp = {0};
+  socket_getsockopt_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
+  rp.status = MIPC_CODE_ERROR;
 
   if ((NULL == Obj) || (sockfd < 0) || (NULL == optvalue) || (NULL == optlen))
   {
@@ -1451,10 +1401,10 @@ int32_t MX_WIFI_Socket_getsockopt(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t 
     cp.socket = sockfd;
     cp.level = level;
     cp.optname = optname;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_GETSOCKOPT_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.status == MIPC_CODE_SUCCESS)
@@ -1480,9 +1430,9 @@ int32_t MX_WIFI_Socket_bind(MX_WIFIObject_t *Obj, int32_t sockfd,
                             const struct sockaddr *addr, int32_t addrlen)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  socket_bind_cparams_t cp;
-  socket_bind_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  socket_bind_cparams_t cp = {0};
+  socket_bind_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
   rp.status =  MIPC_CODE_ERROR;
 
   if ((NULL == Obj) || (sockfd < 0) || (NULL == addr) || (addrlen <= 0))
@@ -1494,10 +1444,10 @@ int32_t MX_WIFI_Socket_bind(MX_WIFIObject_t *Obj, int32_t sockfd,
     cp.socket = sockfd;
     memcpy(&(cp.addr), addr, sizeof(cp.addr));
     cp.length = addrlen;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_BIND_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.status == MIPC_CODE_SUCCESS)
@@ -1509,6 +1459,7 @@ int32_t MX_WIFI_Socket_bind(MX_WIFIObject_t *Obj, int32_t sockfd,
   return ret;
 }
 
+
 /**
   * @brief  Listen a socket.
   * @param  Obj: pointer to module handle
@@ -1519,8 +1470,8 @@ int32_t MX_WIFI_Socket_bind(MX_WIFIObject_t *Obj, int32_t sockfd,
 int32_t MX_WIFI_Socket_listen(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t backlog)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  socket_listen_cparams_t cp;
-  socket_listen_rparams_t rp;
+  socket_listen_cparams_t cp = {0};
+  socket_listen_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
   rp.status =  MIPC_CODE_ERROR;
 
@@ -1531,7 +1482,7 @@ int32_t MX_WIFI_Socket_listen(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t back
   else
   {
     cp.socket = sockfd;
-    cp.n = backlog;
+    cp.backlog = backlog;
     memset(&rp, 0, sizeof(rp));
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_LISTEN_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
@@ -1559,8 +1510,8 @@ int32_t MX_WIFI_Socket_accept(MX_WIFIObject_t *Obj, int32_t sockfd,
                               struct sockaddr *addr, uint32_t *addrlen)
 {
   int32_t ret_fd = -1;
-  socket_accept_cparams_t cp;
-  socket_accept_rparams_t rp;
+  socket_accept_cparams_t cp = {0};
+  socket_accept_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
   rp.socket =  -1;
 
@@ -1571,7 +1522,7 @@ int32_t MX_WIFI_Socket_accept(MX_WIFIObject_t *Obj, int32_t sockfd,
   else
   {
     cp.socket = sockfd;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_ACCEPT_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
                                           (uint8_t *)&rp, &rp_size,
@@ -1600,9 +1551,9 @@ int32_t MX_WIFI_Socket_connect(MX_WIFIObject_t *Obj, int32_t sockfd,
                                const struct sockaddr *addr, int32_t addrlen)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  socket_connect_cparams_t cp;
-  socket_connect_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  socket_connect_cparams_t cp = {0};
+  socket_connect_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
   rp.status =  MIPC_CODE_ERROR;
 
   if ((NULL == Obj) || (sockfd < 0) || (NULL == addr) || (addrlen <= 0))
@@ -1614,10 +1565,10 @@ int32_t MX_WIFI_Socket_connect(MX_WIFIObject_t *Obj, int32_t sockfd,
     cp.socket = sockfd;
     memcpy(&(cp.addr), addr, sizeof(cp.addr));
     cp.length = addrlen;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_CONNECT_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.status == MIPC_CODE_SUCCESS)
@@ -1642,9 +1593,9 @@ int32_t MX_WIFI_Socket_connect(MX_WIFIObject_t *Obj, int32_t sockfd,
 int32_t MX_WIFI_Socket_shutdown(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t mode)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  socket_shutdown_cparams_t cp;
-  socket_shutdown_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  socket_shutdown_cparams_t cp = {0};
+  socket_shutdown_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
   rp.status =  MIPC_CODE_ERROR;
 
   if ((NULL == Obj) || (sockfd < 0))
@@ -1655,10 +1606,10 @@ int32_t MX_WIFI_Socket_shutdown(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t mo
   {
     cp.filedes = sockfd;
     cp.how = mode;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_SHUTDOWN_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.status == MIPC_CODE_SUCCESS)
@@ -1679,9 +1630,9 @@ int32_t MX_WIFI_Socket_shutdown(MX_WIFIObject_t *Obj, int32_t sockfd, int32_t mo
 int32_t MX_WIFI_Socket_close(MX_WIFIObject_t *Obj, int32_t sockfd)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  socket_close_cparams_t cp;
-  socket_close_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  socket_close_cparams_t cp = {0};
+  socket_close_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
   rp.status =  MIPC_CODE_ERROR;
 
   if ((NULL == Obj) || (sockfd < 0))
@@ -1691,10 +1642,10 @@ int32_t MX_WIFI_Socket_close(MX_WIFIObject_t *Obj, int32_t sockfd)
   else
   {
     cp.filedes = sockfd;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_CLOSE_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.status == MIPC_CODE_SUCCESS)
@@ -1705,6 +1656,7 @@ int32_t MX_WIFI_Socket_close(MX_WIFIObject_t *Obj, int32_t sockfd)
   }
   return ret;
 }
+
 
 /**
   * @brief  Socket send.
@@ -1719,9 +1671,8 @@ int32_t MX_WIFI_Socket_send(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf,
                             int32_t len, int32_t flags)
 {
   int32_t ret = -1;
-  socket_send_cparams_t *cp;
-  uint16_t cp_size;
-  socket_send_rparams_t rp;
+  socket_send_cparams_t *cp = NULL;
+  socket_send_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
   int32_t datalen;
 
@@ -1740,7 +1691,7 @@ int32_t MX_WIFI_Socket_send(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf,
       datalen = len;
     }
     rp.sent = 0;
-    cp_size = (sizeof(socket_send_cparams_t) - 1 + datalen);
+    const uint16_t cp_size = (sizeof(socket_send_cparams_t) - 1 + datalen);
     cp = (socket_send_cparams_t *)MX_WIFI_MALLOC(cp_size);
     if (NULL != cp)
     {
@@ -1761,6 +1712,7 @@ int32_t MX_WIFI_Socket_send(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf,
   return ret;
 }
 
+
 /**
   * @brief  Socket sendto.
   * @param  Obj: pointer to module handle
@@ -1777,9 +1729,8 @@ int32_t MX_WIFI_Socket_sendto(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf
                               struct sockaddr *toaddr, int32_t toaddrlen)
 {
   int32_t ret = -1;
-  socket_sendto_cparams_t *cp;
-  uint16_t cp_size;
-  socket_sendto_rparams_t rp;
+  socket_sendto_cparams_t *cp = NULL;
+  socket_sendto_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
   int32_t datalen;
 
@@ -1797,7 +1748,7 @@ int32_t MX_WIFI_Socket_sendto(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf
     {
       datalen = len;
     }
-    cp_size = (sizeof(socket_sendto_cparams_t) - 1 + datalen);
+    const uint16_t cp_size = (sizeof(socket_sendto_cparams_t) - 1 + datalen);
     cp = (socket_sendto_cparams_t *)MX_WIFI_MALLOC(cp_size);
     if (NULL != cp)
     {
@@ -1821,6 +1772,7 @@ int32_t MX_WIFI_Socket_sendto(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf
   return ret;
 }
 
+
 /**
   * @brief  Socket recv.
   * @param  Obj: pointer to module handle
@@ -1834,8 +1786,8 @@ int32_t MX_WIFI_Socket_recv(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf,
                             int32_t len, int32_t flags)
 {
   int32_t ret = -1;
-  socket_recv_cparams_t cp;
-  socket_recv_rparams_t *rp;
+  socket_recv_cparams_t cp = {0};
+  socket_recv_rparams_t *rp = NULL;
   uint16_t rp_size;
   int32_t datalen;
 
@@ -1879,6 +1831,7 @@ int32_t MX_WIFI_Socket_recv(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *buf,
   return ret;
 }
 
+
 /**
   * @brief  Socket recvfrom.
   * @param  Obj: pointer to module handle
@@ -1895,9 +1848,8 @@ int32_t MX_WIFI_Socket_recvfrom(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *b
                                 struct sockaddr *fromaddr, uint32_t *fromaddrlen)
 {
   int32_t ret = -1;
-  socket_recvfrom_cparams_t cp;
-  socket_recvfrom_rparams_t *rp;
-  uint16_t rp_size;
+  socket_recvfrom_cparams_t cp = {0};
+  socket_recvfrom_rparams_t *rp = NULL;
   int32_t datalen;
 
   if ((NULL == Obj) || (sockfd < 0) || (NULL == buf) || (len <= 0) || (NULL == fromaddr) \
@@ -1916,7 +1868,7 @@ int32_t MX_WIFI_Socket_recvfrom(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *b
     {
       datalen = len;
     }
-    rp_size = (sizeof(socket_recvfrom_rparams_t) - 1 + datalen);
+    uint16_t rp_size = (sizeof(socket_recvfrom_rparams_t) - 1 + datalen);
     rp = (socket_recvfrom_rparams_t *)MX_WIFI_MALLOC(rp_size);
     if (NULL != rp)
     {
@@ -1943,6 +1895,7 @@ int32_t MX_WIFI_Socket_recvfrom(MX_WIFIObject_t *Obj, int32_t sockfd, uint8_t *b
   return ret;
 }
 
+
 /**
   * @brief  Gethostbyname, only for IPv4 address.
   * @param  Obj: pointer to module handle
@@ -1954,8 +1907,8 @@ int32_t MX_WIFI_Socket_gethostbyname(MX_WIFIObject_t *Obj, struct sockaddr *addr
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
   mx_sockaddr_in_t addr_in;
-  socket_gethostbyname_cparams_t cp;
-  socket_gethostbyname_rparams_t rp;
+  socket_gethostbyname_cparams_t cp = {0};
+  socket_gethostbyname_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
   rp.status =  MIPC_CODE_ERROR;
 
@@ -1966,10 +1919,9 @@ int32_t MX_WIFI_Socket_gethostbyname(MX_WIFIObject_t *Obj, struct sockaddr *addr
   else
   {
     uint32_t msize;
-    memset(&cp, 0, sizeof(cp));
     msize = MIN(sizeof(cp.name), strlen(name) + 1);
     memcpy(&(cp.name[0]), name, msize);
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_GETHOSTBYNAME_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
                                           (uint8_t *)&rp, &rp_size,
@@ -1988,6 +1940,7 @@ int32_t MX_WIFI_Socket_gethostbyname(MX_WIFIObject_t *Obj, struct sockaddr *addr
   return ret;
 }
 
+
 /**
   * @brief  Ping a host, only for IPv4 address.
   * @param  Obj: pointer to module handle
@@ -2001,9 +1954,9 @@ int32_t MX_WIFI_Socket_ping(MX_WIFIObject_t *Obj, const char *hostname,
                             int32_t count, int32_t delay, int32_t response[])
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  wifi_ping_cparams_t cp;
+  wifi_ping_cparams_t cp = {0};
   int32_t ping_resp[1 + MX_WIFI_PING_MAX];
-  wifi_ping_rparams_t *rp;
+  wifi_ping_rparams_t *rp = NULL;
   uint16_t rp_size = sizeof(ping_resp);
   int32_t i = 0;
 
@@ -2014,7 +1967,6 @@ int32_t MX_WIFI_Socket_ping(MX_WIFIObject_t *Obj, const char *hostname,
   else
   {
     int32_t msize;
-    memset(&cp, 0, sizeof(cp));
     msize = MIN(sizeof(cp.hostname), strlen(hostname) + 1);
     memcpy(&(cp.hostname[0]), hostname, msize);
     cp.count = count;
@@ -2159,8 +2111,8 @@ int32_t MX_WIFI_Socket_select(MX_WIFIObject_t *Obj, int32_t nfds, fd_set *readfd
 int32_t MX_WIFI_Socket_getpeername(MX_WIFIObject_t *Obj, int32_t sockfd, struct sockaddr *addr, uint32_t *addrlen)
 {
   int32_t ret = -1;
-  socket_getpeername_cparams_t cp;
-  socket_getpeername_rparams_t rp;
+  socket_getpeername_cparams_t cp = {0};
+  socket_getpeername_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
 
   if ((NULL == Obj) || (sockfd < 0) || (NULL == addr) || (NULL == addrlen) || (*addrlen <= 0))
@@ -2169,8 +2121,8 @@ int32_t MX_WIFI_Socket_getpeername(MX_WIFIObject_t *Obj, int32_t sockfd, struct 
   }
   else
   {
-    cp.s = sockfd;
-    memset(&rp, 0, sizeof(rp));
+    cp.sockfd = sockfd;
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_GETPEERNAME_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
                                           (uint8_t *)&rp, &rp_size,
@@ -2187,6 +2139,7 @@ int32_t MX_WIFI_Socket_getpeername(MX_WIFIObject_t *Obj, int32_t sockfd, struct 
   return ret;
 }
 
+
 /**
   * @brief  socket getsockname.
   * @param  Obj: pointer to module handle
@@ -2198,8 +2151,8 @@ int32_t MX_WIFI_Socket_getpeername(MX_WIFIObject_t *Obj, int32_t sockfd, struct 
 int32_t MX_WIFI_Socket_getsockname(MX_WIFIObject_t *Obj, int32_t sockfd, struct sockaddr *addr, uint32_t *addrlen)
 {
   int32_t ret = -1;
-  socket_getsockname_cparams_t cp;
-  socket_getsockname_rparams_t rp;
+  socket_getsockname_cparams_t cp = {0};
+  socket_getsockname_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
   rp.status =  MIPC_CODE_ERROR;
 
@@ -2209,8 +2162,8 @@ int32_t MX_WIFI_Socket_getsockname(MX_WIFIObject_t *Obj, int32_t sockfd, struct 
   }
   else
   {
-    cp.s = sockfd;
-    memset(&rp, 0, sizeof(rp));
+    cp.sockfd = sockfd;
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_SOCKET_GETSOCKNAME_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
                                           (uint8_t *)&rp, &rp_size,
@@ -2227,6 +2180,7 @@ int32_t MX_WIFI_Socket_getsockname(MX_WIFIObject_t *Obj, int32_t sockfd, struct 
   return ret;
 }
 
+
 /* mDNS */
 
 /**
@@ -2239,10 +2193,9 @@ int32_t MX_WIFI_Socket_getsockname(MX_WIFIObject_t *Obj, int32_t sockfd, struct 
 int32_t MX_WIFI_MDNS_start(MX_WIFIObject_t *Obj, const char *domain, char *hostname)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  mdns_start_cparams_t cparams;
-  int32_t status;
-  uint16_t out_size = sizeof(status);
-  status =  MIPC_CODE_ERROR;
+  mdns_start_cparams_t cparams = {0};
+  int32_t status =  MIPC_CODE_ERROR;
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -2250,12 +2203,11 @@ int32_t MX_WIFI_MDNS_start(MX_WIFIObject_t *Obj, const char *domain, char *hostn
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     memcpy(&(cparams.domain[0]), domain, sizeof(cparams.domain));
     memcpy(&(cparams.hostname[0]), hostname, sizeof(cparams.hostname));
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_START_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2267,6 +2219,7 @@ int32_t MX_WIFI_MDNS_start(MX_WIFIObject_t *Obj, const char *domain, char *hostn
 
   return ret;
 }
+
 
 /**
   * @brief  stop mDNS service.
@@ -2277,7 +2230,7 @@ int32_t MX_WIFI_MDNS_stop(MX_WIFIObject_t *Obj)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t rparams_size;
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -2285,9 +2238,9 @@ int32_t MX_WIFI_MDNS_stop(MX_WIFIObject_t *Obj)
   }
   else
   {
-    rparams_size = sizeof(status);
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_STOP_CMD, NULL, 0,
-                                          (uint8_t *)&status, &rparams_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2298,6 +2251,7 @@ int32_t MX_WIFI_MDNS_stop(MX_WIFIObject_t *Obj)
   }
   return ret;
 }
+
 
 /**
   * @brief  announce a service.
@@ -2310,9 +2264,9 @@ int32_t MX_WIFI_MDNS_announce_service(MX_WIFIObject_t *Obj,
                                       struct mc_mdns_service *service, mwifi_if_t interface)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  mdns_announce_cparams_t cparams;
+  mdns_announce_cparams_t cparams = {0};
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if ((NULL == Obj) || (NULL == service))
   {
@@ -2320,12 +2274,11 @@ int32_t MX_WIFI_MDNS_announce_service(MX_WIFIObject_t *Obj,
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     cparams.iface = interface;
     memcpy(&(cparams.service_data), service, sizeof(cparams.service_data));
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_ANNOUNCE_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2337,6 +2290,7 @@ int32_t MX_WIFI_MDNS_announce_service(MX_WIFIObject_t *Obj,
 
   return ret;
 }
+
 
 /**
   * @brief  deannounce a service.
@@ -2350,9 +2304,9 @@ int32_t MX_WIFI_MDNS_deannounce_service(MX_WIFIObject_t *Obj,
                                         mwifi_if_t interface)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  mdns_deannounce_cparams_t cparams;
+  mdns_deannounce_cparams_t cparams = {0};
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if ((NULL == Obj) || (NULL == service))
   {
@@ -2360,12 +2314,11 @@ int32_t MX_WIFI_MDNS_deannounce_service(MX_WIFIObject_t *Obj,
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     cparams.iface = interface;
     memcpy(&(cparams.service_data), service, sizeof(cparams.service_data));
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_DEANNOUNCE_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2377,6 +2330,7 @@ int32_t MX_WIFI_MDNS_deannounce_service(MX_WIFIObject_t *Obj,
 
   return ret;
 }
+
 
 /**
   * @brief  deannounce all services.
@@ -2387,9 +2341,9 @@ int32_t MX_WIFI_MDNS_deannounce_service(MX_WIFIObject_t *Obj,
 int32_t MX_WIFI_MDNS_deannounce_service_all(MX_WIFIObject_t *Obj, mwifi_if_t interface)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  mdns_deannounce_all_cparams_t cparams;
+  mdns_deannounce_all_cparams_t cparams = {0};
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -2397,11 +2351,10 @@ int32_t MX_WIFI_MDNS_deannounce_service_all(MX_WIFIObject_t *Obj, mwifi_if_t int
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     cparams.iface = interface;
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_DEANNOUNCE_ALL_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2413,6 +2366,7 @@ int32_t MX_WIFI_MDNS_deannounce_service_all(MX_WIFIObject_t *Obj, mwifi_if_t int
 
   return ret;
 }
+
 
 /**
   * @brief  Send interface state change event to mdns
@@ -2425,9 +2379,9 @@ int32_t MX_WIFI_MDNS_iface_state_change(MX_WIFIObject_t *Obj, mwifi_if_t interfa
                                         enum iface_state state)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  mdns_iface_state_change_cparams_t cparams;
+  mdns_iface_state_change_cparams_t cparams = {0};
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -2435,12 +2389,11 @@ int32_t MX_WIFI_MDNS_iface_state_change(MX_WIFIObject_t *Obj, mwifi_if_t interfa
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     cparams.iface = interface;
     cparams.state = state;
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_IFACE_STATE_CHANGE_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2453,8 +2406,9 @@ int32_t MX_WIFI_MDNS_iface_state_change(MX_WIFIObject_t *Obj, mwifi_if_t interfa
   return ret;
 }
 
+
 /**
-  * @brief  Set new host name, use mdns_iface_state_change(interface, REANNOUNCE) to anounce
+  * @brief  Set new host name, use mdns_iface_state_change(interface, REANNOUNCE) to announce
   *         the new host name.
   * @param  Obj: pointer to module handle
   * @param  hostname: new hostname
@@ -2463,9 +2417,9 @@ int32_t MX_WIFI_MDNS_iface_state_change(MX_WIFIObject_t *Obj, mwifi_if_t interfa
 int32_t MX_WIFI_MDNS_set_hostname(MX_WIFIObject_t *Obj, char *hostname)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  mdns_set_hostname_cparams_t cparams;
+  mdns_set_hostname_cparams_t cparams = {0};
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -2473,11 +2427,10 @@ int32_t MX_WIFI_MDNS_set_hostname(MX_WIFIObject_t *Obj, char *hostname)
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     strncpy(cparams.hostname, hostname, MDNS_MAX_LABEL_LEN);
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_SET_HOSTNAME_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2488,6 +2441,7 @@ int32_t MX_WIFI_MDNS_set_hostname(MX_WIFIObject_t *Obj, char *hostname)
   }
   return ret;
 }
+
 
 /**
   * @brief  sets the TXT record field for a given mDNS service.
@@ -2501,9 +2455,9 @@ int32_t MX_WIFI_MDNS_set_txt_rec(MX_WIFIObject_t *Obj, struct mc_mdns_service *s
                                  char separator)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  mdns_set_txt_rec_cparams_t cparams;
+  mdns_set_txt_rec_cparams_t cparams = {0};
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -2511,13 +2465,12 @@ int32_t MX_WIFI_MDNS_set_txt_rec(MX_WIFIObject_t *Obj, struct mc_mdns_service *s
   }
   else
   {
-    memset(&cparams, 0, sizeof(cparams));
     memcpy(&(cparams.service_data), service, sizeof(cparams.service_data));
     strncpy(cparams.keyvals, keyvals, MDNS_MAX_KEYVAL_LEN);
     cparams.separator = separator;
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_MDNS_SET_TXT_REC_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -2528,6 +2481,7 @@ int32_t MX_WIFI_MDNS_set_txt_rec(MX_WIFIObject_t *Obj, struct mc_mdns_service *s
   }
   return ret;
 }
+
 
 /* TLS */
 
@@ -2542,9 +2496,9 @@ int32_t MX_WIFI_MDNS_set_txt_rec(MX_WIFIObject_t *Obj, struct mc_mdns_service *s
 int32_t MX_WIFI_TLS_set_ver(MX_WIFIObject_t *Obj, mtls_ver_t version)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  tls_set_ver_cparams_t cp;
-  tls_set_ver_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  tls_set_ver_cparams_t cp = {0};
+  tls_set_ver_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
   if ((NULL == Obj))
   {
@@ -2553,10 +2507,10 @@ int32_t MX_WIFI_TLS_set_ver(MX_WIFIObject_t *Obj, mtls_ver_t version)
   else
   {
     cp.version = version;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_TLS_SET_VER_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == rp.ret)
@@ -2569,6 +2523,7 @@ int32_t MX_WIFI_TLS_set_ver(MX_WIFIObject_t *Obj, mtls_ver_t version)
   return ret;
 }
 
+
 /**
   * @brief   TLS set client certificate
   * @param   Obj: pointer to module handle
@@ -2579,12 +2534,11 @@ int32_t MX_WIFI_TLS_set_ver(MX_WIFIObject_t *Obj, mtls_ver_t version)
 int32_t MX_WIFI_TLS_set_clientCertificate(MX_WIFIObject_t *Obj, uint8_t *client_cert, uint16_t cert_len)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  tls_set_client_cert_cparams_t *cp;
-  uint16_t cp_size;
-  tls_set_client_cert_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  tls_set_client_cert_cparams_t *cp = NULL;
+  const uint16_t cp_size = sizeof(tls_set_client_cert_cparams_t) -1 + cert_len;
+  tls_set_client_cert_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
-  cp_size = sizeof(tls_set_client_cert_cparams_t) -1 + cert_len;
   if ((NULL == Obj) || (NULL == client_cert) || (cert_len == (uint16_t)0)
       || (cp_size > (uint16_t)(MX_WIFI_IPC_PAYLOAD_SIZE)))
   {
@@ -2602,7 +2556,7 @@ int32_t MX_WIFI_TLS_set_clientCertificate(MX_WIFIObject_t *Obj, uint8_t *client_
       memset(&rp, 0, sizeof(rp));
       if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_TLS_SET_CLIENT_CERT_CMD,
                                             (uint8_t *)cp, cp_size,
-                                            (uint8_t *)&rp, &out_size,
+                                            (uint8_t *)&rp, &rp_size,
                                             MX_WIFI_CMD_TIMEOUT))
       {
         if (MIPC_CODE_SUCCESS == rp.ret)
@@ -2617,6 +2571,7 @@ int32_t MX_WIFI_TLS_set_clientCertificate(MX_WIFIObject_t *Obj, uint8_t *client_
   return ret;
 }
 
+
 /**
   * @brief   TLS set client private key
   * @param   Obj: pointer to module handle
@@ -2627,12 +2582,11 @@ int32_t MX_WIFI_TLS_set_clientCertificate(MX_WIFIObject_t *Obj, uint8_t *client_
 int32_t MX_WIFI_TLS_set_clientPrivateKey(MX_WIFIObject_t *Obj, uint8_t *client_private_key, uint16_t key_len)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  tls_set_client_cert_cparams_t *cp;
-  uint16_t cp_size;
-  tls_set_client_cert_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  tls_set_client_cert_cparams_t *cp = NULL;
+  const uint16_t cp_size = sizeof(tls_set_client_cert_cparams_t) -1 + key_len;
+  tls_set_client_cert_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
-  cp_size = sizeof(tls_set_client_cert_cparams_t) -1 + key_len;
   if ((NULL == Obj) || (NULL == client_private_key) || (key_len == (uint16_t)0)
       || (cp_size > (uint16_t)(MX_WIFI_IPC_PAYLOAD_SIZE)))
   {
@@ -2647,10 +2601,10 @@ int32_t MX_WIFI_TLS_set_clientPrivateKey(MX_WIFIObject_t *Obj, uint8_t *client_p
       cp->cert_pem_size = 0;
       cp->private_key_pem_size = key_len;
       memcpy(&(cp->cert_data[0]), client_private_key, key_len);
-      memset(&rp, 0, sizeof(rp));
+
       if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_TLS_SET_CLIENT_CERT_CMD,
                                             (uint8_t *)cp, cp_size,
-                                            (uint8_t *)&rp, &out_size,
+                                            (uint8_t *)&rp, &rp_size,
                                             MX_WIFI_CMD_TIMEOUT))
       {
         if (MIPC_CODE_SUCCESS == rp.ret)
@@ -2663,6 +2617,7 @@ int32_t MX_WIFI_TLS_set_clientPrivateKey(MX_WIFIObject_t *Obj, uint8_t *client_p
   }
   return ret;
 }
+
 
 /**
   * @brief   TLS client create a TLS connection.
@@ -2699,6 +2654,7 @@ int32_t MX_WIFI_TLS_connect(MX_WIFIObject_t *Obj, int32_t domain, int32_t type, 
   return ret;
 }
 
+
 /**
   * @brief   TLS client create a TLS connection with SNI.
   * @param   Obj: pointer to module handle
@@ -2717,12 +2673,11 @@ int32_t MX_WIFI_TLS_connect_sni(MX_WIFIObject_t *Obj, const char *sni_servername
                                 const struct sockaddr *addr, int32_t addrlen, char *ca, int32_t calen)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  tls_connect_sni_cparams_t *cp;
-  uint16_t cp_size;
-  tls_connect_sni_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  tls_connect_sni_cparams_t *cp = NULL;
+  const uint16_t cp_size = sizeof(tls_connect_sni_cparams_t) -1 + calen;
+  tls_connect_sni_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
-  cp_size = sizeof(tls_connect_sni_cparams_t) -1 + calen;
   if ((NULL == Obj) || (NULL == addr) || (addrlen <= 0) || (cp_size > (uint16_t)(MX_WIFI_IPC_PAYLOAD_SIZE)))
   {
     ret = 0; /* null for MX_WIFI_STATUS_PARAM_ERROR */
@@ -2747,7 +2702,7 @@ int32_t MX_WIFI_TLS_connect_sni(MX_WIFIObject_t *Obj, const char *sni_servername
       }
       if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_TLS_CONNECT_SNI_CMD,
                                             (uint8_t *)cp, cp_size,
-                                            (uint8_t *)&rp, &out_size,
+                                            (uint8_t *)&rp, &rp_size,
                                             MX_WIFI_CMD_TIMEOUT))
       {
         if (NULL == rp.tls)
@@ -2766,6 +2721,7 @@ int32_t MX_WIFI_TLS_connect_sni(MX_WIFIObject_t *Obj, const char *sni_servername
   return ret;
 }
 
+
 /**
   * @brief   TLS send data
   * @param   Obj: pointer to module handle
@@ -2778,9 +2734,9 @@ int32_t MX_WIFI_TLS_connect_sni(MX_WIFIObject_t *Obj, const char *sni_servername
 int32_t MX_WIFI_TLS_send(MX_WIFIObject_t *Obj, mtls_t tls, void *data, int32_t len)
 {
   int32_t ret = -1;
-  tls_send_cparams_t *cp;
+  tls_send_cparams_t *cp = NULL;
   uint16_t cp_size;
-  tls_send_rparams_t rp;
+  tls_send_rparams_t rp = {0};
   uint16_t rp_size = sizeof(rp);
   int32_t datalen;
 
@@ -2790,7 +2746,6 @@ int32_t MX_WIFI_TLS_send(MX_WIFIObject_t *Obj, mtls_t tls, void *data, int32_t l
   }
   else
   {
-    rp.sent = 0;
     if ((len + sizeof(tls_send_cparams_t) - 1) > MX_WIFI_IPC_PAYLOAD_SIZE)
     {
       datalen = (MX_WIFI_IPC_PAYLOAD_SIZE - (sizeof(tls_send_cparams_t) - 1));
@@ -2819,6 +2774,7 @@ int32_t MX_WIFI_TLS_send(MX_WIFIObject_t *Obj, mtls_t tls, void *data, int32_t l
   return ret;
 }
 
+
 /**
   * @brief   TLS redeive data
   * @param   Obj: pointer to module handle
@@ -2831,8 +2787,8 @@ int32_t MX_WIFI_TLS_send(MX_WIFIObject_t *Obj, mtls_t tls, void *data, int32_t l
 int32_t MX_WIFI_TLS_recv(MX_WIFIObject_t *Obj, mtls_t tls, void *buf, int32_t len)
 {
   int32_t ret = -1;
-  tls_recv_cparams_t cp;
-  tls_recv_rparams_t *rp;
+  tls_recv_cparams_t cp = {0};
+  tls_recv_rparams_t *rp = NULL;
   uint16_t rp_size;
   int32_t datalen;
 
@@ -2875,6 +2831,7 @@ int32_t MX_WIFI_TLS_recv(MX_WIFIObject_t *Obj, mtls_t tls, void *buf, int32_t le
   return ret;
 }
 
+
 /**
   * @brief   Close the TLS session, release resource.
   * @param   Obj: pointer to module handle
@@ -2884,9 +2841,9 @@ int32_t MX_WIFI_TLS_recv(MX_WIFIObject_t *Obj, mtls_t tls, void *buf, int32_t le
 int32_t MX_WIFI_TLS_close(MX_WIFIObject_t *Obj, mtls_t tls)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  tls_close_cparams_t cp;
-  tls_close_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  tls_close_cparams_t cp = {0};
+  tls_close_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
   if ((NULL == Obj) || (NULL == tls))
   {
@@ -2895,10 +2852,10 @@ int32_t MX_WIFI_TLS_close(MX_WIFIObject_t *Obj, mtls_t tls)
   else
   {
     cp.tls = tls;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_TLS_CLOSE_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.ret == MIPC_CODE_SUCCESS)
@@ -2909,6 +2866,7 @@ int32_t MX_WIFI_TLS_close(MX_WIFIObject_t *Obj, mtls_t tls)
   }
   return ret;
 }
+
 
 /**
   * @brief   Set TLS nonblock mode.
@@ -2920,9 +2878,9 @@ int32_t MX_WIFI_TLS_close(MX_WIFIObject_t *Obj, mtls_t tls)
 int32_t MX_WIFI_TLS_set_nonblock(MX_WIFIObject_t *Obj, mtls_t tls, int32_t nonblock)
 {
   int32_t ret = MX_WIFI_STATUS_ERROR;
-  tls_set_nonblock_cparams_t cp;
-  tls_set_nonblock_rparams_t rp;
-  uint16_t out_size = sizeof(rp);
+  tls_set_nonblock_cparams_t cp = {0};
+  tls_set_nonblock_rparams_t rp = {0};
+  uint16_t rp_size = sizeof(rp);
 
   if ((NULL == Obj) || (NULL == tls))
   {
@@ -2932,10 +2890,10 @@ int32_t MX_WIFI_TLS_set_nonblock(MX_WIFIObject_t *Obj, mtls_t tls, int32_t nonbl
   {
     cp.tls = tls;
     cp.nonblock = nonblock;
-    memset(&rp, 0, sizeof(rp));
+
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_TLS_SET_NONBLOCK_CMD,
                                           (uint8_t *)&cp, sizeof(cp),
-                                          (uint8_t *)&rp, &out_size,
+                                          (uint8_t *)&rp, &rp_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (rp.ret == MIPC_CODE_SUCCESS)
@@ -2946,6 +2904,7 @@ int32_t MX_WIFI_TLS_set_nonblock(MX_WIFIObject_t *Obj, mtls_t tls, int32_t nonbl
   }
   return ret;
 }
+
 
 /**
   * @brief   Start webserver.
@@ -3094,10 +3053,10 @@ MX_WIFI_STATUS_T MX_WIFI_Network_bypass_mode_set(MX_WIFIObject_t *Obj, int32_t e
                                                  mx_wifi_netlink_input_cb_t netlink_input_callbck,
                                                  void *user_args)
 {
-  int32_t ret = MX_WIFI_STATUS_ERROR;
-  wifi_bypass_set_cparams_t cparams;
+  MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
+  wifi_bypass_set_cparams_t cparams = {0};
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -3119,7 +3078,7 @@ MX_WIFI_STATUS_T MX_WIFI_Network_bypass_mode_set(MX_WIFIObject_t *Obj, int32_t e
     cparams.mode = enable;
     if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_WIFI_BYPASS_SET_CMD,
                                           (uint8_t *)&cparams, sizeof(cparams),
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -3131,34 +3090,24 @@ MX_WIFI_STATUS_T MX_WIFI_Network_bypass_mode_set(MX_WIFIObject_t *Obj, int32_t e
   return ret;
 }
 
-/**
-  * @brief  Network bypass mode data output
-  * @param  Obj: pointer to module handle
-  * @param  pbuf: pbuf data to send
-  * @param  size: pbuf size
-  * @param  data: pbuf payload
-  * @param  len:  payload len
-  * @param  interface: STATION_IDX, SOFTAP_IDX(not supported now)
-  * @retval Operation Status.
-  */
+
 MX_WIFI_STATUS_T MX_WIFI_Network_bypass_netlink_output(MX_WIFIObject_t *Obj, void *data,
                                                        int32_t len,
                                                        int32_t interface)
 {
-  int32_t ret = MX_WIFI_STATUS_ERROR;
-  wifi_bypass_out_cparams_t *cparams;
-  uint16_t cparams_size;
-  int32_t status = MIPC_CODE_ERROR;
-  uint16_t rparams_size = sizeof(status);
+  MX_WIFI_STATUS_T ret = MX_WIFI_STATUS_ERROR;
+  wifi_bypass_out_cparams_t *cparams = NULL;
+  const uint16_t cparams_size = sizeof(wifi_bypass_out_cparams_t) + len;
 
-  if ((NULL == Obj) || (len <= 0) || \
-      (((int32_t)STATION_IDX != interface) && ((int32_t)SOFTAP_IDX != interface)))
+  int32_t status = MIPC_CODE_ERROR;
+  uint16_t status_size = sizeof(status);
+
+  if ((NULL == Obj) || (len <= 0) || (((int32_t)STATION_IDX != interface) && ((int32_t)SOFTAP_IDX != interface)))
   {
     ret = MX_WIFI_STATUS_PARAM_ERROR;
   }
   else
   {
-    cparams_size = sizeof(wifi_bypass_out_cparams_t) + len;
     if (cparams_size > MX_WIFI_IPC_PAYLOAD_SIZE)
     {
       len = MX_WIFI_IPC_PAYLOAD_SIZE - sizeof(wifi_bypass_out_cparams_t);
@@ -3184,7 +3133,7 @@ MX_WIFI_STATUS_T MX_WIFI_Network_bypass_netlink_output(MX_WIFIObject_t *Obj, voi
 
       if (MIPC_CODE_SUCCESS == mipc_request(MIPC_API_WIFI_BYPASS_OUT_CMD,
                                             (uint8_t *)cparams, cparams_size,
-                                            (uint8_t *)&status, &rparams_size,
+                                            (uint8_t *)&status, &status_size,
                                             MX_WIFI_CMD_TIMEOUT))
       {
         if (MIPC_CODE_SUCCESS == status)
@@ -3207,6 +3156,7 @@ MX_WIFI_STATUS_T MX_WIFI_Network_bypass_netlink_output(MX_WIFIObject_t *Obj, voi
 }
 #endif /* MX_WIFI_NETWORK_BYPASS_MODE */
 
+
 /**
   * @brief   set powersave onoff for wifi station mode.
   * @param   Obj: pointer to module handle
@@ -3218,7 +3168,7 @@ int32_t MX_WIFI_station_powersave(MX_WIFIObject_t *Obj, int32_t ps_onoff)
   int32_t ret = MX_WIFI_STATUS_ERROR;
   uint16_t mipc_ps_cmd;
   int32_t status = MIPC_CODE_ERROR;
-  uint16_t out_size = sizeof(status);
+  uint16_t status_size = sizeof(status);
 
   if (NULL == Obj)
   {
@@ -3235,7 +3185,7 @@ int32_t MX_WIFI_station_powersave(MX_WIFIObject_t *Obj, int32_t ps_onoff)
       mipc_ps_cmd = MIPC_API_WIFI_PS_OFF_CMD;
     }
     if (MIPC_CODE_SUCCESS == mipc_request(mipc_ps_cmd, NULL, 0,
-                                          (uint8_t *)&status, &out_size,
+                                          (uint8_t *)&status, &status_size,
                                           MX_WIFI_CMD_TIMEOUT))
     {
       if (MIPC_CODE_SUCCESS == status)
@@ -3246,4 +3196,3 @@ int32_t MX_WIFI_station_powersave(MX_WIFIObject_t *Obj, int32_t ps_onoff)
   }
   return ret;
 }
-

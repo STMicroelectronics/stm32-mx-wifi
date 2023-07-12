@@ -45,17 +45,33 @@ extern "C" {
  * API
  */
 
-/* transfer HCI data to SLIP data,
- * return the SLIP buffer */
+/**
+  * @brief  transfer HCI data to SLIP packet
+  *
+  * @param  data: data to be transfer
+  * @param  len: size of the data to be transfer
+  * @retval the SLIP packet
+  */
 uint8_t *slip_transfer(uint8_t *data, uint16_t len, uint16_t *outlen);
 
-/* PHY receive one serial byte to SLIP,
- * return SLIP frame
- * NOTE: use slip_buf_free to free slip buffer if data process finished. */
+
+/**
+  * @brief  Feed one serial byte to SLIP
+  * @note   use slip_buf_free to free slip buffer if data process finished
+  *
+  * @param  data: one serial byte
+  * @retval new SLIP frame, NULL if no new frame
+  */
 mx_buf_t *slip_input_byte(uint8_t data);
 
-/* free slip frame buffer returned by slip_input_byte */
+
+/**
+  * @brief  free slip frame buffer returned by slip_input_byte
+  *
+  * @param  buf: slip frame buffer
+  */
 void slip_buf_free(uint8_t *buf);
+
 
 enum
 {
