@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2020 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -29,8 +29,7 @@ extern "C" {
 #include "mx_wifi.h"
 
 /* Exported Constants --------------------------------------------------------*/
-/* #define MX_WIFI_IPC_DEBUG */
-#define MX_API_VERSION      ("2.0.0")
+#define MX_API_VERSION      ("2.3.4")
 
 /**
   * @brief IPC error code
@@ -80,7 +79,7 @@ extern "C" {
 #define MIPC_API_SYS_CFG_SERVER_START_CMD     ((uint16_t)(MIPC_API_SYS_CMD_BASE + 0x0006))
 #define MIPC_API_SYS_CFG_SERVER_STOP_CMD      ((uint16_t)(MIPC_API_SYS_CMD_BASE + 0x0007))
 
-/* Wifi */
+/* WiFi */
 #define MIPC_API_WIFI_CMD_BASE                ((uint16_t)(MIPC_API_CMD_BASE + 0x0100))
 #define MIPC_API_WIFI_GET_MAC_CMD             ((uint16_t)(MIPC_API_WIFI_CMD_BASE + 0x0001))
 #define MIPC_API_WIFI_SCAN_CMD                ((uint16_t)(MIPC_API_WIFI_CMD_BASE + 0x0002))
@@ -103,6 +102,7 @@ extern "C" {
 #define MIPC_API_WIFI_GET_IP6_STATE_CMD       ((uint16_t)(MIPC_API_WIFI_CMD_BASE + 0x0013))
 #define MIPC_API_WIFI_GET_IP6_ADDR_CMD        ((uint16_t)(MIPC_API_WIFI_CMD_BASE + 0x0014))
 #define MIPC_API_WIFI_GET_SOFT_MAC_CMD        ((uint16_t)(MIPC_API_WIFI_CMD_BASE + 0x0015))
+#define MIPC_API_WIFI_PING6_CMD               ((uint16_t)(MIPC_API_WIFI_CMD_BASE + 0x0016))
 
 /* Socket */
 #define MIPC_API_SOCKET_CMD_BASE              ((uint16_t)(MIPC_API_CMD_BASE + 0x0200))
@@ -155,7 +155,7 @@ extern "C" {
 #define MIPC_API_SYS_REBOOT_EVENT             ((uint16_t)(MIPC_API_SYS_EVENT_BASE + 0x0001))
 #define MIPC_API_SYS_FOTA_STATUS_EVENT        ((uint16_t)(MIPC_API_SYS_EVENT_BASE + 0x0002))
 
-/* Wifi */
+/* WiFi */
 #define MIPC_API_WIFI_EVENT_BASE              ((uint16_t)(MIPC_API_EVENT_BASE + 0x0100))
 #define MIPC_API_WIFI_STATUS_EVENT            ((uint16_t)(MIPC_API_WIFI_EVENT_BASE + 0x0001))
 #define MIPC_API_WIFI_BYPASS_INPUT_EVENT      ((uint16_t)(MIPC_API_WIFI_EVENT_BASE + 0x0002))
@@ -224,9 +224,29 @@ int32_t mipc_echo(uint8_t *in, uint16_t in_len, uint8_t *out, uint16_t *out_len,
   * @brief  Event callback for the system reboot IPC API
   * @param  mxbuff: data for the callback
   */
-void mapi_reboot_event_callback(mx_buf_t *buff);
+void mapi_reboot_event_callback(mx_buf_t *mxbuff);
 
-/* wifi */
+
+/* Module API params types ---------------------------------------------------*/
+
+typedef struct _sys_common_rparams_s
+{
+  int32_t status;
+} sys_common_rparams_t;
+
+
+/* System */
+#define FOTA_FILE_URL_MAX_LEN                 (256)
+#define FOTA_COMPONENT_MD5_MAX_LEN            (64)
+
+typedef struct sys_fota_start_cparams_s
+{
+  char url[FOTA_FILE_URL_MAX_LEN];
+  char md5[FOTA_COMPONENT_MD5_MAX_LEN];
+} sys_fota_start_cparams_t;
+
+
+/* WiFi */
 #pragma pack(1)
 typedef struct _wifi_scan_cparams_s
 {
@@ -235,16 +255,10 @@ typedef struct _wifi_scan_cparams_s
 
 typedef struct _wifi_scan_rparams_s
 {
-  uint8_t num;
+  uint8_t         num;
   mwifi_ap_info_t ap[1]; /* ap info array memory */
 } wifi_scan_rparams_t;
 
-typedef struct
-{
-  uint8_t bssid[6];          /**< bssid of access-point */
-  uint8_t channel;           /**< channel of access-point */
-  mwifi_security_t security; /**< security of access-point */
-} mwifi_connect_attr_t;
 
 typedef struct _wifi_connect_cparams_s
 {
@@ -259,18 +273,18 @@ typedef struct _wifi_connect_cparams_s
 
 typedef struct
 {
-  int32_t is_connected;          /**< The link to wlan is established or not, 0: disconnected, 1: connected. */
-  int32_t rssi;                  /**< Signal strength of the current connected AP. */
-  int8_t ssid[33];               /**< SSID of the current connected wlan. */
-  uint8_t bssid[6];              /**< BSSID of the current connected wlan. */
-  int8_t key[65];                /**< The passphrase/PSK of the connected AP. */
-  int32_t channel;               /**< Channel of the current connected wlan. */
-  mwifi_security_t security;     /**< security of access-point. */
+  int32_t          is_connected;    /**< The link to wlan is established or not, 0: disconnected, 1: connected. */
+  int32_t          rssi;            /**< Signal strength of the current connected AP. */
+  int8_t           ssid[33];        /**< SSID of the current connected wlan. */
+  uint8_t          bssid[6];        /**< BSSID of the current connected wlan. */
+  int8_t           key[65];         /**< The passphrase/PSK of the connected AP. */
+  int32_t          channel;         /**< Channel of the current connected wlan. */
+  mwifi_security_t security;        /**< security of access-point. */
 } mwifi_link_info_t;
 
 typedef struct _wifi_get_linkinof_rparams_s
 {
-  int32_t status;
+  int32_t           status;
   mwifi_link_info_t info;
 } wifi_get_linkinof_rparams_t;
 
@@ -291,7 +305,7 @@ typedef struct _wifi_softap_start_cparams_s
 /* ping */
 typedef struct wifi_ping_cparams_s
 {
-  char hostname[255];
+  char    hostname[255];
   int32_t count;
   int32_t delay_ms;
 } wifi_ping_cparams_t;
@@ -314,35 +328,103 @@ typedef struct wifi_bypass_get_rparams_s
 
 typedef struct wifi_bypass_out_cparams_s
 {
-  int32_t idx;
-  uint8_t useless[16];
+  int32_t  idx;
+  uint8_t  useless[16];
   uint16_t data_len;
 } wifi_bypass_out_cparams_t;
 
 typedef struct wifi_bypass_in_rparams_s
 {
-  int32_t idx;
-  uint8_t useless[16];
+  int32_t  idx;
+  uint8_t  useless[16];
   uint16_t tot_len;
 } wifi_bypass_in_rparams_t;
+
+
+/* WPA-E certificate type: rootca/client_cert/client_key */
+enum
+{
+  EAP_ROOTCA = 0x01,
+  EAP_CLIENT_CERT,
+  EAP_CLIENT_KEY,
+  EAP_CERT_TYPE_MAX
+};
+
+typedef struct wifi_eap_set_cert_cparams_s
+{
+  uint8_t  type;
+  uint16_t len;
+  char     cert[1];
+} wifi_eap_set_cert_cparams_t;
+
+/* NOTE: rootca + cert + key size too long, just set ca/cert/key one-by-one before eap_connect */
+typedef struct
+{
+  uint8_t eap_type;        /* support: EAP_TYPE_PEAP, EAP_TYPE_TTLS, EAP_TYPE_TLS */
+  char    *rootca;         /* not used here, set before connect */
+  char    *client_cert;    /* not used here, set before connect */
+  char    *client_key;     /* not used here, set before connect */
+} wifi_eap_attr_t;
+
+typedef struct wifi_eap_connect_cparams_s
+{
+  char            ssid[32];
+  char            identity[32];
+  char            password[64];
+  uint8_t         attr_used;      /* 0: set eap_attr null(means use default), 1: use new setting */
+  wifi_eap_attr_t attr;
+  uint8_t         ip_used;        /* 0: set ip_attr null(means use DHCP), 1: use new setting */
+  mwifi_ip_attr_t ip;
+} wifi_eap_connect_cparams_t;
+
+/* Get ipv6 addr */
+typedef struct wifi_get_ip6_state_cprams_s
+{
+  uint8_t    addr_num;
+  mwifi_if_t iface;
+} wifi_get_ip6_state_cprams_t;
+
+typedef struct wifi_get_ip6_state_rprams_s
+{
+  uint8_t state;
+} wifi_get_ip6_state_rprams_t;
+
+typedef struct wifi_get_ip6_addr_cprams_s
+{
+  uint8_t    addr_num;
+  mwifi_if_t iface;
+} wifi_get_ip6_addr_cprams_t;
+
+typedef struct wifi_get_ip6_addr_rprams_s
+{
+  int32_t status;
+  uint8_t ip6[16];
+} wifi_get_ip6_addr_rprams_t;
+
 #pragma pack()
 
 /**
   * @brief  Event callback for wifi status
   * @param  netbuf: data for the callback
   */
-void mapi_wifi_status_event_callback(mx_buf_t *nbuf);
+void mapi_wifi_status_event_callback(mx_buf_t *netbuf);
 
 
 /**
   * @brief  Event callback for wifi netlink input
   * @param  netbuf: data for the callback
   */
-void mapi_wifi_netlink_input_callback(mx_buf_t *nbuf);
+void mapi_wifi_netlink_input_callback(mx_buf_t *netbuf);
 
+
+/**
+  * @brief  Event callback for wifi fota status
+  * @param  netbuf: data for the callback
+  */
+void mapi_fota_status_event_callback(mx_buf_t *nbuf);
 
 #if MX_WIFI_NETWORK_BYPASS_MODE == 0
-/* socket */
+/* Socket */
 #pragma pack(1)
 /* create */
 typedef struct _socket_create_cparams_s
@@ -360,11 +442,11 @@ typedef struct _socket_create_rparams_s
 /* setsockopt */
 typedef struct _socket_setsockopt_cparams_s
 {
-  int32_t socket;
-  int32_t level;
-  int32_t optname;
-  socklen_t optlen;
-  uint8_t optval[16];
+  int32_t      socket;
+  int32_t      level;
+  int32_t      optname;
+  mx_socklen_t optlen;
+  uint8_t      optval[16];
 } socket_setsockopt_cparams_t;
 
 typedef struct _socket_setsockopt_rparams_s
@@ -382,17 +464,17 @@ typedef struct _socket_getsockopt_cparams_s
 
 typedef struct _socket_getsockopt_rparams_s
 {
-  int32_t status;
-  socklen_t optlen;
-  uint8_t optval[16];
+  int32_t      status;
+  mx_socklen_t optlen;
+  uint8_t      optval[16];
 } socket_getsockopt_rparams_t;
 
 /* bind */
 typedef struct _socket_bind_cparams_s
 {
-  int32_t         socket;
-  struct sockaddr addr;
-  socklen_t       length;
+  int32_t                    socket;
+  struct mx_sockaddr_storage addr;
+  mx_socklen_t               length;
 } socket_bind_cparams_t;
 
 typedef struct _socket_bind_rparams_s
@@ -403,9 +485,9 @@ typedef struct _socket_bind_rparams_s
 /* connect */
 typedef struct _socket_connect_cparams_s
 {
-  int32_t         socket;
-  struct sockaddr addr;
-  socklen_t       length;
+  int32_t                    socket;
+  struct mx_sockaddr_storage addr;
+  mx_socklen_t               length;
 } socket_connect_cparams_t;
 
 typedef struct _socket_connect_rparams_s
@@ -453,12 +535,12 @@ typedef struct _socket_send_rparams_s
 /* sendto */
 typedef struct _socket_sendto_cparams_s
 {
-  int32_t         socket;
-  size_t          size;
-  int32_t         flags;
-  struct sockaddr addr;
-  socklen_t       length;
-  uint8_t         buffer[1];
+  int32_t                    socket;
+  size_t                     size;
+  int32_t                    flags;
+  struct mx_sockaddr_storage addr;
+  mx_socklen_t               length;
+  uint8_t                    buffer[1];
 } socket_sendto_cparams_t;
 
 typedef struct _socket_sendto_rparams_s
@@ -490,10 +572,10 @@ typedef struct _socket_recvfrom_cparams_s
 
 typedef struct _socket_recvfrom_rparams_s
 {
-  int32_t         received;
-  struct sockaddr addr;
-  socklen_t       length;
-  uint8_t         buffer[1];
+  int32_t                    received;
+  struct mx_sockaddr_storage addr;
+  mx_socklen_t               length;
+  uint8_t                    buffer[1];
 } socket_recvfrom_rparams_t;
 
 /* gethostbyname */
@@ -508,6 +590,19 @@ typedef struct _socket_gethostbyname_rparams_s
   uint32_t s_addr;
 } socket_gethostbyname_rparams_t;
 
+typedef struct _socket_getaddrinfo_cparam_s
+{
+  char               nodename[MX_HOSTNAME_LEN_MAX + 1];
+  char               servname[MX_SERVICE_NAME_SIZE + 1];
+  struct mx_addrinfo hints;
+} socket_getaddrinfo_cparam_t;
+
+typedef struct _socket_getaddrinfo_rparam_s
+{
+  int32_t            status;
+  struct mx_addrinfo res;
+} socket_getaddrinfo_rparam_t;
+
 /* getpeername */
 typedef struct _socket_getpeername_cparams_s
 {
@@ -517,8 +612,8 @@ typedef struct _socket_getpeername_cparams_s
 typedef struct _socket_getpeername_rparams_s
 {
   int32_t                    status;
-  struct sockaddr            name;
-  socklen_t                  namelen;
+  struct mx_sockaddr_storage name;
+  mx_socklen_t               namelen;
 } socket_getpeername_rparams_t;
 
 /* getsockname */
@@ -530,8 +625,8 @@ typedef struct _socket_getsockname_cparams_s
 typedef struct _socket_getsockname_rparams_s
 {
   int32_t                    status;
-  struct sockaddr name;
-  socklen_t namelen;
+  struct mx_sockaddr_storage name;
+  mx_socklen_t               namelen;
 } socket_getsockname_rparams_t;
 
 /* listen */
@@ -554,9 +649,9 @@ typedef struct _socket_accept_cparams_s
 
 typedef struct _socket_accept_rparams_s
 {
-  int32_t socket;
-  struct sockaddr addr;
-  socklen_t length;
+  int32_t                    socket;
+  struct mx_sockaddr_storage addr;
+  mx_socklen_t               length;
 } socket_accept_rparams_t;
 
 /* TLS */
@@ -612,11 +707,11 @@ typedef struct _tls_accept_rparams_s
 /* tls connect_sni */
 typedef struct _tls_connect_sni_cparams_s
 {
-  struct sockaddr addr;
-  socklen_t length;
-  char sni_servername[128];
-  int32_t calen;
-  char ca[1];
+  struct mx_sockaddr_storage addr;
+  mx_socklen_t               length;
+  char                       sni_servername[128];
+  int32_t                    calen;
+  char                       ca[1];
 } tls_connect_sni_cparams_t;
 
 typedef struct _tls_connect_sni_rparams_s

@@ -3,8 +3,8 @@
   * @file    mx_wifi_uart.c
   * @author  MCD Application Team
   * @brief   This file implements the IO operations to deal with the mx_wifi
-  *          module. It mainly Init and Deinit the UART interface. Send and
-  *          receive data over it.
+  *          module. It mainly initializes and de-initializes the UART interface.
+  *          Send and receive data over it.
   ******************************************************************************
   * @attention
   *
@@ -31,11 +31,11 @@
 #include "core/mx_wifi_hci.h"
 #include "core/mx_wifi_slip.h"
 
-#if (MX_WIFI_USE_SPI == 0)
+#if defined(MX_WIFI_USE_SPI) && (MX_WIFI_USE_SPI == 0)
 
-#ifdef MX_WIFI_IO_DEBUG
-#define DEBUG_LOG(...)       printf(__VA_ARGS__) /*;*/
-#define DEBUG_WARNING(...)   printf(__VA_ARGS__) /*;*/
+#if defined(MX_WIFI_IO_DEBUG)
+#define DEBUG_LOG(...)       (void)printf(__VA_ARGS__) /*;*/
+#define DEBUG_WARNING(...)   (void)printf(__VA_ARGS__) /*;*/
 
 static void DEBUG_PRINT(char *prefix, uint8_t *data, uint16_t len)
 {
@@ -87,9 +87,6 @@ static SEM_DECLARE(UartRxSem);
 
 static uint8_t RxChar;
 
-THREAD_DECLARE(MX_WIFI_RxThreadId);
-
-
 /* Private functions ---------------------------------------------------------*/
 static uint16_t MX_WIFI_UART_ReceiveData(uint8_t *pdata, uint16_t request_len);
 static uint16_t MX_WIFI_UART_SendData(uint8_t *pdata, uint16_t len);
@@ -100,6 +97,8 @@ static int8_t MX_WIFI_UART_DeInit(void);
 
 
 #ifndef MX_WIFI_BARE_OS_H
+static THREAD_DECLARE(MX_WIFI_RxThreadId);
+
 static __IO bool UARTRxTaskQuitFlag = false;
 
 static void mx_wifi_uart_rx_task(THREAD_CONTEXT_TYPE argument);
@@ -182,7 +181,7 @@ static int8_t MX_WIFI_UART_DeInit(void)
   if (HAL_UART_Abort_IT(HUartMX) != HAL_OK)
   {
     /* Error_Handler(); */
-    while (1);
+    MX_ASSERT(false);
   }
 
   return rc;
@@ -193,7 +192,7 @@ static uint8_t RxBuffer[MX_CIRCULAR_UART_RX_BUFFER_SIZE];
 static __IO uint32_t RxBufferWritePos = 0;
 static __IO uint32_t RxBufferReadPos = 0;
 
-/* sending data byte per byte to HCI would be very inefficient in term of       */
+/* Sending data byte per byte to HCI would be very inefficient in term of       */
 /* MCU cycles, buffering whole MTU is too costly, need to allocate a            */
 /* while MTU buffer size and perform copy, so find a compromise                 */
 /* using a circular buffer approach and sending data by segment of half         */
@@ -220,10 +219,10 @@ void mxchip_WIFI_ISR_UART(void *huart)
   if (RxBufferWritePos == RxBufferReadPos)
   {
     /* This should not happen, or we run out of buffer and data are lost. */
-    while (1);
+    MX_ASSERT(false);
   }
 
-  /* Circular buffer is half full, so time to signal data to HCI. */
+  /* Circular buffer is half full, so it is time to signal data to HCI. */
   if ((MX_CIRCULAR_UART_RX_BUFFER_SIZE / 2) == circular_uart_pending_data_len)
   {
     SEM_SIGNAL(UartRxSem);
@@ -232,11 +231,12 @@ void mxchip_WIFI_ISR_UART(void *huart)
 
   if (0 != circular_uart_pending_data_len)
   {
-    /** use the SLIP_END character to signal data to next stage,
+    /**
+      * use the SLIP_END character to signal data to next stage,
       * to avoid waiting for other data that would never come
       * in fact it should be possible to use UART native HW support for such detection/management.
       */
-    if (SLIP_END == RxChar)
+    if (((uint8_t)SLIP_END) == RxChar)
     {
       SEM_SIGNAL(UartRxSem);
       circular_uart_pending_data_len = 0;
@@ -246,7 +246,7 @@ void mxchip_WIFI_ISR_UART(void *huart)
   /* Fire again request to get a new byte. */
   if (HAL_OK != HAL_UART_Receive_IT((UART_HandleTypeDef *)huart, &RxChar, 1))
   {
-    while (1);
+    MX_ASSERT(false);
   }
 }
 
@@ -256,9 +256,12 @@ void process_txrx_poll(uint32_t timeout)
   /* Waiting for having data received on UART. */
   if (SEM_OK == SEM_WAIT(UartRxSem, timeout, NULL))
   {
-    /* this a volatile so copy it to a local one to avoid any issues */
+    /* This a volatile so copy it to a local one to avoid any issues. */
     const uint32_t write_pos = RxBufferWritePos;
     uint32_t read_pos = RxBufferReadPos;
+
+    DEBUG_LOG("W:%" PRIu32 " R:%" PRIu32 "\n", write_pos, read_pos);
+
     if (write_pos != read_pos)
     {
       /* write_pos pointer has re-looped, so send the two segments. */
@@ -285,6 +288,8 @@ void process_txrx_poll(uint32_t timeout)
 #ifndef MX_WIFI_BARE_OS_H
 static void mx_wifi_uart_rx_task(THREAD_CONTEXT_TYPE argument)
 {
+  (void)argument;
+
   UARTRxTaskQuitFlag = false;
 
   while (UARTRxTaskQuitFlag != true)
@@ -339,7 +344,7 @@ static uint16_t MX_WIFI_UART_ReceiveData(uint8_t *pdata, uint16_t request_len)
 
 int32_t mxwifi_probe(void **ll_drv_context)
 {
-  int32_t ret;
+  int32_t ret = -1;
   if (MX_WIFI_RegisterBusIO(&MxWifiObj,
                             MX_WIFI_UART_Init,
                             MX_WIFI_UART_DeInit,
@@ -347,12 +352,11 @@ int32_t mxwifi_probe(void **ll_drv_context)
                             MX_WIFI_UART_SendData,
                             MX_WIFI_UART_ReceiveData) == MX_WIFI_STATUS_OK)
   {
-    *ll_drv_context = &MxWifiObj;
+    if (NULL != ll_drv_context)
+    {
+      *ll_drv_context = &MxWifiObj;
+    }
     ret = 0;
-  }
-  else
-  {
-    ret = -1;
   }
 
   return ret;

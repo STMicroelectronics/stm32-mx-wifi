@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2020 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -26,37 +26,39 @@
 #include "mx_wifi.h"
 #include "mx_wifi_conf.h"
 #include "core/mx_wifi_hci.h"
-#include "mx_wifi_slip.h"
-
 #include "io_pattern/mx_wifi_io.h"
 
-#include "checksumutils.h"
+#if (MX_WIFI_USE_SPI == 0)
+#include "mx_wifi_slip.h"
+#endif /* MX_WIFI_USE_SPI */
 
 #ifdef MX_WIFI_HCI_DEBUG
-#define DEBUG_LOG(...)       printf(__VA_ARGS__) /*;*/
+#define DEBUG_LOG(...)       (void)printf(__VA_ARGS__) /*;*/
 #else
-#define DEBUG_LOG(M, ...)
+#define DEBUG_LOG(...)
 #endif /* MX_WIFI_HCI_DEBUG */
 
-#define DEBUG_ERROR(...)     printf(__VA_ARGS__) /*;*/
+#define DEBUG_ERROR(...)     (void)printf(__VA_ARGS__) /*;*/
 
 /* Private defines -----------------------------------------------------------*/
 
 /* Private function prototypes -----------------------------------------------*/
 
-/* HCI low level function */
+/* HCI low level function. */
 static hci_send_func_t TclOutputFunc = NULL;
 
 /* HCI receive data queue. */
 static FIFO_DECLARE(HciPacketFifo);
 
-static bool mx_wifi_hci_pkt_verify(const uint8_t *data, uint16_t len);
+static bool mx_wifi_hci_pkt_verify(const uint8_t *data, uint32_t len);
 
 
 /* Private functions ---------------------------------------------------------*/
-static bool mx_wifi_hci_pkt_verify(const uint8_t *data, uint16_t len)
+static bool mx_wifi_hci_pkt_verify(const uint8_t *data, uint32_t len)
 {
-  /* here each Uart slip frame or Spi frame as a Hci packet */
+  (void)data;
+  (void)len;
+  /* Here each UART slip frame or SPI frame as a HCI packet. */
   return true;
 }
 
@@ -90,10 +92,6 @@ int32_t mx_wifi_hci_send(uint8_t *payload, uint16_t len)
     DEBUG_ERROR("tcl_output(spi) error sent=%d !\n", sent);
     ret = -1;
   }
-  else
-  {
-    ret = 0;
-  }
 #else
   uint8_t *slip_frame = NULL;
   uint16_t slip_len = 0;
@@ -114,6 +112,8 @@ int32_t mx_wifi_hci_send(uint8_t *payload, uint16_t len)
 
     MX_WIFI_FREE(slip_frame);
     slip_frame = NULL;
+
+    MX_STAT(free);
   }
   else
   {
@@ -148,6 +148,8 @@ void mx_wifi_hci_free(mx_buf_t *nbuf)
   if (NULL != nbuf)
   {
     (void) MX_NET_BUFFER_FREE(nbuf);
+
+    MX_STAT(free);
   }
 }
 
@@ -178,6 +180,8 @@ void mx_wifi_hci_input(mx_buf_t *netbuf)
         {
           DEBUG_ERROR("push tcl input queue err!\n");
           MX_NET_BUFFER_FREE(netbuf);
+
+          MX_STAT(free);
         }
         else
         {
@@ -189,6 +193,8 @@ void mx_wifi_hci_input(mx_buf_t *netbuf)
       {
         DEBUG_LOG("input bad tcl pkt!\n");
         MX_NET_BUFFER_FREE(netbuf);
+
+        MX_STAT(free);
       }
     }
   }

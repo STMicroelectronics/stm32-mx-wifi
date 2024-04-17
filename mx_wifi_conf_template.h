@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2021 STMicroelectronics.
+  * Copyright (c) 2020 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -26,28 +26,33 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include <stdint.h>
+#include <inttypes.h>
 #include "main.h" /* Inherit some declarations from the current platform. */
 
-/* Use SPI interface by default */
 
 #ifndef MX_WIFI_USE_SPI
-#define MX_WIFI_USE_SPI                                                     (1)
+#define MX_WIFI_USE_SPI                             (0)
 #endif /* MX_WIFI_USE_SPI */
 
-/* do not use RTOS but bare metal approach by default */
+/* SPI DMA usage, default on */
+#ifndef DMA_ON_USE
+#define DMA_ON_USE                                  (1)
+#endif /* DMA_ON_USE */
+
+/* Do not use RTOS but bare metal approach by default. */
 #ifndef MX_WIFI_USE_CMSIS_OS
-#define MX_WIFI_USE_CMSIS_OS                                                (0)
+#define MX_WIFI_USE_CMSIS_OS                        (0)
 #endif /* MX_WIFI_USE_CMSIS_OS */
 
-/* Use At command mode by default, TCP/IP stack is running on module  */
+/* Use AT command mode by default, TCP/IP stack is running on the module. */
 #ifndef MX_WIFI_NETWORK_BYPASS_MODE
-#define MX_WIFI_NETWORK_BYPASS_MODE                                         (0)
+#define MX_WIFI_NETWORK_BYPASS_MODE                 (0)
 #endif /* MX_WIFI_NETWORK_BYPASS_MODE */
 
 
-/* Do not copy TX buffer */
+/* Do not copy TX buffer. */
 #ifndef MX_WIFI_TX_BUFFER_NO_COPY
-#define MX_WIFI_TX_BUFFER_NO_COPY                                           (1)
+#define MX_WIFI_TX_BUFFER_NO_COPY                   (1)
 #endif /* MX_WIFI_TX_BUFFER_NO_COPY */
 
 
@@ -58,26 +63,18 @@ extern "C" {
 /* #define MX_WIFI_SLIP_DEBUG */
 /* #define MX_WIFI_IO_DEBUG   */
 
-/* check if OS primitive are already declared */
-/* if not, include default declaration      */
-#ifndef LOCK_DECLARE
+
 
 #if (MX_WIFI_USE_CMSIS_OS == 1)
 #include "mx_wifi_cmsis_os.h"
+
 #else
 #include "mx_wifi_bare_os.h"
 #endif /* MX_WIFI_USE_CMSIS_OS */
 
-#endif /* LOCK_DECLARE */
-
-
 #define MX_WIFI_PRODUCT_NAME                        ("MXCHIP-WIFI")
+
 #define MX_WIFI_PRODUCT_ID                          ("EMW3080B")
-
-#ifndef MX_WIFI_USE_SPI
-#define MX_WIFI_USE_SPI                             (0)
-#endif /* MX_WIFI_USE_SPI */
-
 
 #ifndef MX_WIFI_UART_BAUDRATE
 #define MX_WIFI_UART_BAUDRATE                       (115200*2)
@@ -87,29 +84,30 @@ extern "C" {
 #define MX_WIFI_MTU_SIZE                            (1500)
 #endif /* MX_WIFI_MTU_SIZE */
 
-#define MX_WIFI_BYPASS_HEADER_SIZE                  (28)  /* MIPC_HEADER_SIZE(6) + sizeof(wifi_bypass_in_rparams_t)(22),
-                                                           * set with PBUF_LINK_ENCAPSULATION_HLEN */
+#define MX_WIFI_BYPASS_HEADER_SIZE                  (28)  /* MIPC_HEADER_SIZE(6) + sizeof(wifi_bypass_in_rparams_t)(22)
+                                                           * set with PBUF_LINK_ENCAPSULATION_HLEN in case of LwIP usage. */
 
-#define MX_WIFI_PBUF_LINK_HLEN                      (14)  /* link header (PBUF_LINK_HLEN) set in lwip */
+#define MX_WIFI_PBUF_LINK_HLEN                      (14)  /* Link header (PBUF_LINK_HLEN) in case of LwIP usage. */
 
-#if (MX_WIFI_NETWORK_BYPASS_MODE==1)
-/* Use lwip PBUF_POOL_BUFSIZE = TCP_MSS + 40 + PBUF_LINK_ENCAPSULATION_HLEN + PBUF_LINK_HLEN. */
+#if (MX_WIFI_NETWORK_BYPASS_MODE == 1)
+/* Use LwIP PBUF_POOL_BUFSIZE = TCP_MSS + 40 + PBUF_LINK_ENCAPSULATION_HLEN + PBUF_LINK_HLEN. */
 #define MX_WIFI_BUFFER_SIZE \
   (MX_WIFI_MTU_SIZE + MX_WIFI_BYPASS_HEADER_SIZE + MX_WIFI_PBUF_LINK_HLEN)
+
 #else
-#define MX_WIFI_BUFFER_SIZE                         (2500)  /* bigger buffer size */
-#endif /* (MX_WIFI_NETWORK_BYPASS_MODE==1) */
+#define MX_WIFI_BUFFER_SIZE                         (2500)  /* Bigger buffer size (needed with some other use cases) */
+#endif /* (MX_WIFI_NETWORK_BYPASS_MODE == 1) */
 
-/* MX_WIFI_BUFFER_SIZE - MIPC_HEADER_SIZE */
-#define MX_WIFI_IPC_PAYLOAD_SIZE                    ((MX_WIFI_BUFFER_SIZE) - 6)
+#define MX_WIFI_IPC_PAYLOAD_SIZE                    (MX_WIFI_BUFFER_SIZE - 6) /* MX_WIFI_BUFFER_SIZE - MIPC_HEADER_SIZE */
 
-/* MX_WIFI_IPC_PAYLOAD_SIZE - socket_api_params_header */
-#define MX_WIFI_SOCKET_DATA_SIZE                    ((MX_WIFI_IPC_PAYLOAD_SIZE)-12)
+#define MX_WIFI_SOCKET_DATA_SIZE                    (MX_WIFI_IPC_PAYLOAD_SIZE - 12) /* MX_WIFI_IPC_PAYLOAD_SIZE - socket_api_params_header */
 
 #ifndef MX_WIFI_CMD_TIMEOUT
 #define MX_WIFI_CMD_TIMEOUT                         (10000)  /* default 10s timeout */
 #endif /* MX_WIFI_CMD_TIMEOUT */
+
 #define MX_WIFI_MAX_SOCKET_NBR                      (8)
+
 #define MX_WIFI_MAX_DETECTED_AP                     (10)
 
 #define MX_WIFI_MAX_SSID_NAME_SIZE                  (32)
@@ -157,7 +155,8 @@ extern "C" {
 
 /* Maximum number of RX buffer that can be queued by Hardware interface (SPI/UART)                         */
 /* This is used to size internal queue, and avoid to block the IP thread if it can still push some buffers */
-/* Impact on Memory foot print is weak , one single void* per place in the queue                           */
+/* Impact on memory foot print is one single void* per place in the queue, but it may lead to              */
+/* over allocation TCP/IP stack.                                                                           */
 #ifndef MX_WIFI_MAX_RX_BUFFER_COUNT
 #define MX_WIFI_MAX_RX_BUFFER_COUNT                 (2)
 #endif /* MX_WIFI_MAX_RX_BUFFER_COUNT */
@@ -165,12 +164,11 @@ extern "C" {
 
 /* Maximum number of TX buffer that can be queued by IP stack (LwIP or Netx) without blocking the calling thread */
 /* This is used to size internal queue, and avoid to block the IP thread if it can still push some buffers       */
-/* Impact on Memory foot print is one single void* per place in the queue, but it may lead to over allocation    */
-/* TCP/IP stack (LwIP  for instance )                                                                            */
+/* Impact on memory foot print is one single void* per place in the queue, but it may lead to over allocation    */
+/* TCP/IP stack (LwIP for instance )                                                                             */
 #ifndef MX_WIFI_MAX_TX_BUFFER_COUNT
 #define MX_WIFI_MAX_TX_BUFFER_COUNT                 (4)
 #endif /* MX_WIFI_MAX_TX_BUFFER_COUNT */
-
 
 
 /**
@@ -184,27 +182,19 @@ extern "C" {
   * For LwIP "PBUF_LINK_ENCAPSULATION_HLEN" must be defined as > MX_WIFI_MIN_TX_HEADER_SIZE,
   * see net_mx_wifi/c file for implementation.
   */
-#define MX_WIFI_MIN_TX_HEADER_SIZE                      (28)
+#define MX_WIFI_MIN_TX_HEADER_SIZE                   (28)
 
-#ifndef MX_WIFI_TX_BUFFER_NO_COPY
-#define MX_WIFI_TX_BUFFER_NO_COPY                       (1)
-#endif /* MX_WIFI_TX_BUFFER_NO_COPY */
+/* Size of the circular buffer for UART mode, when buffer is half full data are transmitted to next stage. */
 
-/* Sizeof the circular buffer for Uart mode, when buffer is hlaf full data are transmitted to next stage */
 #ifndef MX_CIRCULAR_UART_RX_BUFFER_SIZE
-#define MX_CIRCULAR_UART_RX_BUFFER_SIZE                 (400)
+#define MX_CIRCULAR_UART_RX_BUFFER_SIZE              (400)
 #endif /* MX_CIRCULAR_UART_RX_BUFFER_SIZE */
-
-/* SPI DMA usage, default on */
-#ifndef DMA_ON_USE
-#define DMA_ON_USE                                      (1)
-#endif /* DMA_ON_USE */
 
 #ifndef MX_STAT_ON
 #define MX_STAT_ON      0
 #endif /* MX_STAT_ON */
 
-#if MX_STAT_ON == 1
+#if (MX_STAT_ON == 1)
 typedef struct
 {
   uint32_t alloc;
@@ -217,25 +207,23 @@ typedef struct
 
 extern mx_stat_t mx_stat;
 
-#define MX_STAT_LOG() \
-  (void) printf("Number of allocated buffer for Rx and command answer %ld\n", mx_stat.alloc);\
-  (void) printf("Number of free buffer %ld\n",mx_stat.free);\
-  (void) printf("Number of command answer %ld, callback %ld, sum of both %ld (should match alloc && free)\n", \
-                mx_stat.cmd_get_answer,mx_stat.callback,mx_stat.cmd_get_answer+mx_stat.callback); \
-  (void) printf("Number of posted answer (callback + cmd answer) %ld, processed answer %ld\n", \
-                mx_stat.in_fifo,mx_stat.out_fifo);\
+#define MX_STAT_LOG()                                                                                                                  \
+  (void) printf("\n Number of allocated buffer for Rx and command answer %" PRIu32 "\n", mx_stat.alloc);                               \
+  (void) printf(" Number of freed buffer %" PRIu32 "\n", mx_stat.free);                                                                \
+  (void) printf(" Number of command answer %" PRIu32 ", callback %" PRIu32 ", sum of both %" PRIu32 " (should match alloc && free)\n", \
+                mx_stat.cmd_get_answer, mx_stat.callback, mx_stat.cmd_get_answer + mx_stat.callback);                                  \
+  (void) printf(" Number of posted answer (callback + cmd answer) %" PRIu32 ", processed answer %" PRIu32 "\n\n",                      \
+                mx_stat.in_fifo, mx_stat.out_fifo);
 
 #define MX_STAT_INIT()        (void) memset((void*)&mx_stat, 0, sizeof(mx_stat))
 #define MX_STAT(A)            mx_stat.A++
 #define MX_STAT_DECLARE()     mx_stat_t mx_stat
 
 #else /* MX_STAT_ON */
-
 #define MX_STAT_INIT()
 #define MX_STAT(A)
 #define MX_STAT_LOG()
 #define MX_STAT_DECLARE()
-
 #endif /* MX_STAT_ON */
 
 #ifdef __cplusplus

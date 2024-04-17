@@ -3,8 +3,8 @@
   * @file    mx_wifi_spi.c
   * @author  MCD Application Team
   * @brief   This file implements the IO operations to deal with the mx_wifi
-  *          module. It mainly Init and Deinit the SPI interface. Send and
-  *          receive data over it.
+  *          module. It mainly initializes and de-initializes the SPI interface.
+  *          Send and receive data over it.
   ******************************************************************************
   * @attention
   *
@@ -30,17 +30,17 @@
 #include "mx_wifi_io.h"
 #include "core/mx_wifi_hci.h"
 
-#if (MX_WIFI_USE_SPI == 1)
+#if defined(MX_WIFI_USE_SPI) && (MX_WIFI_USE_SPI == 1)
 
-#ifdef MX_WIFI_IO_DEBUG
-#define DEBUG_LOG(...)       printf(__VA_ARGS__) /*;*/
-#define DEBUG_WARNING(...)   printf(__VA_ARGS__) /*;*/
+#if defined(MX_WIFI_IO_DEBUG)
+#define DEBUG_LOG(...)       (void)printf(__VA_ARGS__) /*;*/
+#define DEBUG_WARNING(...)   (void)printf(__VA_ARGS__) /*;*/
 #else
 #define DEBUG_LOG(...)
 #define DEBUG_WARNING(...)
 #endif /* MX_WIFI_IO_DEBUG */
 
-#define DEBUG_ERROR(...)     printf(__VA_ARGS__) /*;*/
+#define DEBUG_ERROR(...)     (void)printf(__VA_ARGS__) /*;*/
 
 
 #pragma pack(1)
@@ -118,7 +118,7 @@ typedef struct _spi_header
 extern SPI_HandleTypeDef MXCHIP_SPI;
 
 /* Private variables ---------------------------------------------------------*/
-static MX_WIFIObject_t MxWifiObj;
+static MX_WIFIObject_t MxWifiObj = {0};
 static SPI_HandleTypeDef *const HSpiMX = &MXCHIP_SPI;
 
 static LOCK_DECLARE(SpiTxLock);
@@ -130,15 +130,12 @@ static SEM_DECLARE(SpiTransferDoneSem);
 static uint8_t *SpiTxData = NULL;
 static uint16_t SpiTxLen  = 0;
 
-THREAD_DECLARE(MX_WIFI_TxRxThreadId);
-
-
 /* Private functions ---------------------------------------------------------*/
 static uint16_t MX_WIFI_SPI_Read(uint8_t *buffer, uint16_t buff_size);
-static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint8_t *rxdata, uint32_t datalen,
+static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint8_t *rxdata, uint16_t datalen,
                                          uint32_t timeout);
-static HAL_StatusTypeDef Transmit(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint32_t datalen, uint32_t timeout);
-static HAL_StatusTypeDef Receive(SPI_HandleTypeDef *hspi, uint8_t *rxdata, uint32_t datalen, uint32_t timeout);
+static HAL_StatusTypeDef Transmit(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint16_t datalen, uint32_t timeout);
+static HAL_StatusTypeDef Receive(SPI_HandleTypeDef *hspi, uint8_t *rxdata, uint16_t datalen, uint32_t timeout);
 
 static int8_t wait_flow_high(uint32_t timeout);
 static uint16_t MX_WIFI_SPI_Write(uint8_t *data, uint16_t len);
@@ -152,7 +149,9 @@ static int8_t MX_WIFI_SPI_DeInit(void);
 
 
 #ifndef MX_WIFI_BARE_OS_H
-static __IO bool SPITxRxTaskQuitFlag;
+static THREAD_DECLARE(MX_WIFI_TxRxThreadId);
+
+static __IO bool SPITxRxTaskQuitFlag = false;
 
 static void mx_wifi_spi_txrx_task(THREAD_CONTEXT_TYPE argument);
 #endif /* MX_WIFI_BARE_OS_H */
@@ -181,6 +180,7 @@ static int8_t MX_WIFI_SPI_Init(uint16_t mode)
   {
     ret = mx_wifi_spi_txrx_start();
   }
+
   return ret;
 }
 
@@ -199,13 +199,17 @@ static int8_t MX_WIFI_SPI_DeInit(void)
 
 void HAL_SPI_TransferCallback(void *hspi)
 {
+  (void)hspi;
   SEM_SIGNAL(SpiTransferDoneSem);
 }
 
 
 void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
 {
-  while (1);
+  if (hspi == HSpiMX)
+  {
+    MX_ASSERT(false);
+  }
 }
 
 
@@ -252,11 +256,13 @@ static uint16_t MX_WIFI_SPI_Write(uint8_t *data, uint16_t len)
 {
   uint16_t sent;
 
+  DEBUG_LOG("\n%s()> %" PRIu32 "\n\n", __FUNCTION__, (uint32_t)len);
+
   LOCK(SpiTxLock);
 
   if ((NULL == data) || (0 == len) || (len > SPI_DATA_SIZE))
   {
-    DEBUG_ERROR("Warning, spi send null or size overflow! len=%" PRIu32 "\n", (uint32_t)len);
+    DEBUG_ERROR("Warning, SPI send null or size overflow! len=%" PRIu32 "\n", (uint32_t)len);
     SpiTxLen = 0;
     sent = 0;
   }
@@ -268,13 +274,14 @@ static uint16_t MX_WIFI_SPI_Write(uint8_t *data, uint16_t len)
     if (SEM_SIGNAL(SpiTxRxSem) != SEM_OK)
     {
       /* Happen if received thread did not have a chance to run on time, need to increase priority */
-      DEBUG_ERROR("Warning, spi semaphore has been already notified\n");
+      DEBUG_ERROR("Warning, SPI semaphore has been already notified\n");
     }
     sent = len;
   }
-  DEBUG_LOG("\n%s()< %" PRIi32 "\n\n", __FUNCTION__, (int32_t)sent);
 
   UNLOCK(SpiTxLock);
+
+  DEBUG_LOG("\n%s()< %" PRIi32 "\n\n", __FUNCTION__, (int32_t)sent);
 
   return sent;
 }
@@ -282,18 +289,18 @@ static uint16_t MX_WIFI_SPI_Write(uint8_t *data, uint16_t len)
 
 static uint16_t MX_WIFI_SPI_Read(uint8_t *buffer, uint16_t buff_size)
 {
+  (void)buffer;
+  (void)buff_size;
   return 0;
 }
 
 
-#if (DMA_ON_USE == 1)
-
-static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint8_t *rxdata, uint32_t datalen,
+static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint8_t *rxdata, uint16_t datalen,
                                          uint32_t timeout)
 {
   HAL_StatusTypeDef ret;
 
-  DEBUG_LOG(("\n%s()> %"PRIu32"\n"), __FUNCTION__, datalen);
+  DEBUG_LOG(("\n%s()> %"PRIu32"\n"), __FUNCTION__, (uint32_t)datalen);
 
 #if 0
   for (uint32_t i = 0; i < datalen; i++)
@@ -302,8 +309,13 @@ static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdat
   }
 #endif /* 0 */
 
+#if (defined(DMA_ON_USE) && (DMA_ON_USE == 1))
   ret = HAL_SPI_TransmitReceive_DMA(hspi, txdata, rxdata, datalen);
   SEM_WAIT(SpiTransferDoneSem, timeout, NULL);
+
+#else
+  ret = HAL_SPI_TransmitReceive(hspi, txdata, rxdata, datalen, timeout);
+#endif /* (DMA_ON_USE == 1) */
 
   DEBUG_LOG("\n%s()< %" PRIi32 "\n\n", __FUNCTION__, (int32_t)ret);
 
@@ -311,14 +323,11 @@ static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdat
 }
 
 
-static HAL_StatusTypeDef Transmit(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint32_t datalen, uint32_t timeout)
+static HAL_StatusTypeDef Transmit(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint16_t datalen, uint32_t timeout)
 {
   HAL_StatusTypeDef ret;
 
-  DEBUG_LOG("\n%s()> %" PRIu32 "\n", __FUNCTION__, datalen);
-
-  ret = HAL_SPI_Transmit_DMA(hspi, txdata, datalen);
-  SEM_WAIT(SpiTransferDoneSem, timeout, NULL);
+  DEBUG_LOG("\n%s()> %" PRIu32 "\n", __FUNCTION__, (uint32_t)datalen);
 
 #if 0
   for (uint32_t i = 0; i < datalen; i++)
@@ -327,20 +336,34 @@ static HAL_StatusTypeDef Transmit(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint
   }
 #endif /* 0 */
 
+
+#if (defined(DMA_ON_USE) && (DMA_ON_USE == 1))
+  ret = HAL_SPI_Transmit_DMA(hspi, txdata, datalen);
+  SEM_WAIT(SpiTransferDoneSem, timeout, NULL);
+
+#else
+  ret = HAL_SPI_Transmit(hspi, txdata, datalen, timeout);
+#endif /* (DMA_ON_USE == 1) */
+
   DEBUG_LOG("\n%s() <%" PRIi32 "\n\n", __FUNCTION__, (int32_t)ret);
 
   return ret;
 }
 
 
-static HAL_StatusTypeDef Receive(SPI_HandleTypeDef *hspi, uint8_t *rxdata, uint32_t datalen, uint32_t timeout)
+static HAL_StatusTypeDef Receive(SPI_HandleTypeDef *hspi, uint8_t *rxdata, uint16_t datalen, uint32_t timeout)
 {
   HAL_StatusTypeDef ret;
 
-  DEBUG_LOG("\n%s()> %" PRIu32 "\n", __FUNCTION__, datalen);
+  DEBUG_LOG("\n%s()> %" PRIu32 "\n", __FUNCTION__, (uint32_t)datalen);
 
+#if (defined(DMA_ON_USE) && (DMA_ON_USE == 1))
   ret = HAL_SPI_Receive_DMA(hspi, rxdata, datalen);
   SEM_WAIT(SpiTransferDoneSem, timeout, NULL);
+
+#else
+  ret = HAL_SPI_Receive(hspi, rxdata, datalen, timeout);
+#endif /* (DMA_ON_USE == 1) */
 
 #if 0
   for (uint32_t i = 0; i < datalen; i++)
@@ -354,45 +377,6 @@ static HAL_StatusTypeDef Receive(SPI_HandleTypeDef *hspi, uint8_t *rxdata, uint3
   return ret;
 }
 
-#else
-
-static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint8_t *rxdata, uint32_t datalen,
-                                         uint32_t timeout)
-{
-  HAL_StatusTypeDef ret;
-  DEBUG_LOG("Spi Tx Rx %d\n", datalen);
-  ret = HAL_SPI_TransmitReceive(hspi, txdata, rxdata, datalen, timeout);
-
-  DEBUG_LOG("\n%s()< %" PRIi32 "\n\n", __FUNCTION__, (int32_t)ret);
-
-  return ret;
-}
-
-
-static HAL_StatusTypeDef Transmit(SPI_HandleTypeDef *hspi, uint8_t *txdata, uint32_t datalen, uint32_t timeout)
-{
-  HAL_StatusTypeDef ret;
-  DEBUG_LOG("Spi Tx %d\n", datalen);
-  ret = HAL_SPI_Transmit(hspi, txdata, datalen, timeout);
-
-  DEBUG_LOG("\n%s()< %" PRIi32 "\n\n", __FUNCTION__, (int32_t)ret);
-
-  return ret;
-}
-
-
-static HAL_StatusTypeDef Receive(SPI_HandleTypeDef *hspi, uint8_t *rxdata, uint32_t datalen, uint32_t timeout)
-{
-  HAL_StatusTypeDef ret;
-  DEBUG_LOG("Spi Rx %d\n", datalen);
-  ret = HAL_SPI_Receive(hspi, rxdata, datalen, timeout);
-
-  DEBUG_LOG("\n%s()< %" PRIi32 "\n\n", __FUNCTION__, (int32_t)ret);
-
-  return ret;
-}
-#endif /* (DMA_ON_USE == 1) */
-
 
 void process_txrx_poll(uint32_t timeout)
 {
@@ -404,6 +388,9 @@ void process_txrx_poll(uint32_t timeout)
   while (netb == NULL)
   {
     netb = MX_NET_BUFFER_ALLOC(MX_WIFI_BUFFER_SIZE);
+
+    MX_STAT(alloc);
+
     if (netb == NULL)
     {
       DELAY_MS(1);
@@ -418,144 +405,167 @@ void process_txrx_poll(uint32_t timeout)
   /* Waiting for data to be sent or to be received. */
   if (SEM_WAIT(SpiTxRxSem, timeout, NULL) == SEM_OK)
   {
-    spi_header_t mheader = {0};
-    spi_header_t sheader = {0};
-    uint8_t *txdata = NULL;
-    uint8_t *rxdata = NULL;
-    uint16_t datalen;
-    HAL_StatusTypeDef ret;
-
     NET_PERF_TASK_TAG(0);
 
-    DEBUG_LOG("\n%s(): %p\n", __FUNCTION__, SpiTxData);
-
-    if (SpiTxData == NULL)
+    LOCK(SpiTxLock);
     {
-      if (!MX_WIFI_SPI_IRQ_IS_HIGH())
+      spi_header_t mheader = {0};
+      spi_header_t sheader = {0};
+      uint8_t *txdata = NULL;
+      bool is_continue = true;
+
+      DEBUG_LOG("\n%s(): %p\n", __FUNCTION__, SpiTxData);
+
+      if (SpiTxData == NULL)
       {
-        /* TX data null means no data to send, IRQ low means no data to be received. */
-        MX_NET_BUFFER_FREE(netb);
-        return;
-      }
-    }
-    else
-    {
-      mheader.len = SpiTxLen;
-      txdata = SpiTxData;
-    }
+        if (!MX_WIFI_SPI_IRQ_IS_HIGH())
+        {
+          /* TX data null means no data to send, IRQ low means no data to be received. */
+          is_continue = false;
 
-    mheader.type = SPI_WRITE;
-    mheader.lenx = ~mheader.len;
-
-    MX_WIFI_SPI_CS_LOW();
-
-    /* Wait for the EMW to be ready. */
-    if (wait_flow_high(20) != 0)
-    {
-      MX_WIFI_SPI_CS_HIGH();
-      DEBUG_ERROR("Wait FLOW timeout 0\n");
-      return;
-    }
-
-    /* Transmit only header part. */
-    if (HAL_OK != TransmitReceive(HSpiMX, (uint8_t *)&mheader, (uint8_t *)&sheader, sizeof(mheader), timeout))
-    {
-      MX_WIFI_SPI_CS_HIGH();
-      DEBUG_ERROR("Send mheader error\n");
-      return;
-    }
-
-    if (sheader.type != SPI_READ)
-    {
-      DEBUG_ERROR("Invalid SPI type %02x\n", sheader.type);
-      MX_WIFI_SPI_CS_HIGH();
-      return;
-    }
-
-    if ((sheader.len ^ sheader.lenx) != 0xFFFF)
-    {
-      MX_WIFI_SPI_CS_HIGH();
-      DEBUG_ERROR("Invalid len %04x-%04x\n", sheader.len, sheader.lenx);
-      return;
-    }
-
-    /* send or received header must be not null */
-    if ((sheader.len == 0) && (mheader.len == 0))
-    {
-      MX_WIFI_SPI_CS_HIGH();
-      return;
-    }
-
-    if ((sheader.len > SPI_DATA_SIZE) || (mheader.len > SPI_DATA_SIZE))
-    {
-      MX_WIFI_SPI_CS_HIGH();
-      DEBUG_ERROR("SPI length invalid: %d-%d\n", sheader.len, mheader.len);
-      return;
-    }
-
-    /* Keep the max length between TX and RX. */
-    if (mheader.len > sheader.len)
-    {
-      datalen = mheader.len;
-    }
-    else
-    {
-      datalen = sheader.len;
-    }
-
-    /* Allocate a buffer for data to be received. */
-    if (sheader.len > 0)
-    {
-      /* Get start of the buffer payload. */
-      rxdata = MX_NET_BUFFER_PAYLOAD(netb);
-    }
-
-    /* FLOW must be high. */
-    if (wait_flow_high(20) != 0)
-    {
-      MX_WIFI_SPI_CS_HIGH();
-      DEBUG_ERROR("Wait FLOW timeout 1\n");
-      return;
-    }
-
-    /* TX with possible RX. */
-    if (NULL != txdata)
-    {
-      SpiTxData = NULL;
-      SpiTxLen = 0;
-      if (NULL != rxdata)
-      {
-        ret = TransmitReceive(HSpiMX, txdata, rxdata, datalen, timeout);
+          /* There nothing to do with the SPI. */
+          /* Free allocated buffer, due to end of life being requested for the hosting thread. */
+#ifndef MX_WIFI_BARE_OS_H
+          if (SPITxRxTaskQuitFlag == true)
+          {
+            MX_NET_BUFFER_FREE(netb);
+            netb = NULL;
+          }
+#endif /* MX_WIFI_BARE_OS_H */
+        }
       }
       else
       {
-        ret = Transmit(HSpiMX, txdata, datalen, timeout);
+        mheader.len = SpiTxLen;
+        txdata = SpiTxData;
+      }
+
+      if (is_continue)
+      {
+        mheader.type = SPI_WRITE;
+        mheader.lenx = ~mheader.len;
+
+        MX_WIFI_SPI_CS_LOW();
+
+        {
+          /* Wait for the EMW to be ready. */
+          if (wait_flow_high(timeout) != 0)
+          {
+            DEBUG_ERROR("Wait FLOW timeout 0\n");
+          }
+          else
+          {
+            /* Transmit only the header part. */
+            if (HAL_OK != TransmitReceive(HSpiMX, (uint8_t *)&mheader, (uint8_t *)&sheader, sizeof(mheader), timeout))
+            {
+              DEBUG_ERROR("Send mheader error\n");
+            }
+            else
+            {
+              if (sheader.type != SPI_READ)
+              {
+                DEBUG_ERROR("Invalid SPI type %02x\n", sheader.type);
+              }
+              else
+              {
+                if ((sheader.len ^ sheader.lenx) != 0xFFFF)
+                {
+                  DEBUG_ERROR("Invalid length %04x-%04x\n", sheader.len, sheader.lenx);
+                }
+                else
+                {
+                  /* Send or received header must be not null */
+                  if ((sheader.len == 0) && (mheader.len == 0))
+                  {
+                  }
+                  else
+                  {
+                    if ((sheader.len > SPI_DATA_SIZE) || (mheader.len > SPI_DATA_SIZE))
+                    {
+                      DEBUG_ERROR("SPI length invalid: %d-%d\n", sheader.len, mheader.len);
+                    }
+                    else
+                    {
+                      uint16_t datalen;
+                      uint8_t *rxdata = NULL;
+
+                      /* Keep the max length between TX and RX. */
+                      if (mheader.len > sheader.len)
+                      {
+                        datalen = mheader.len;
+                      }
+                      else
+                      {
+                        datalen = sheader.len;
+                      }
+
+                      /* Allocate a buffer for data to be received. */
+                      if (sheader.len > 0)
+                      {
+                        /* Get start of the buffer payload. */
+                        rxdata = MX_NET_BUFFER_PAYLOAD(netb);
+                      }
+
+                      /* FLOW must be high. */
+                      if (wait_flow_high(timeout) != 0)
+                      {
+                        DEBUG_ERROR("Wait FLOW timeout 1\n");
+                      }
+                      else
+                      {
+                        HAL_StatusTypeDef ret;
+
+                        /* TX with possible RX. */
+                        if (NULL != txdata)
+                        {
+                          SpiTxData = NULL;
+                          SpiTxLen = 0;
+                          if (NULL != rxdata)
+                          {
+                            ret = TransmitReceive(HSpiMX, txdata, rxdata, datalen, timeout);
+                          }
+                          else
+                          {
+                            ret = Transmit(HSpiMX, txdata, datalen, timeout);
+                          }
+                        }
+                        else
+                        {
+                          ret = Receive(HSpiMX, rxdata, datalen, timeout);
+                        }
+
+                        if (HAL_OK != ret)
+                        {
+                          DEBUG_ERROR("Transmit/Receive data timeout\n");
+                        }
+                        else
+                        {
+                          /* Resize the input buffer and send it back to the processing thread. */
+                          if (sheader.len > 0)
+                          {
+                            NET_PERF_TASK_TAG(1);
+                            MX_NET_BUFFER_SET_PAYLOAD_SIZE(netb, sheader.len);
+                            mx_wifi_hci_input(netb);
+                            netb = NULL;
+                          }
+                          else
+                          {
+                            NET_PERF_TASK_TAG(2);
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          /* Notify transfer done. */
+          MX_WIFI_SPI_CS_HIGH();
+        }
       }
     }
-    else
-    {
-      ret = Receive(HSpiMX, rxdata, datalen, timeout);
-    }
-
-    if (HAL_OK != ret)
-    {
-      MX_WIFI_SPI_CS_HIGH();
-      DEBUG_ERROR("Transmit/Receive data timeout\n");
-      return;
-    }
-
-    /* Resize the input buffer and send it back to the processing thread. */
-    if (sheader.len > 0)
-    {
-      NET_PERF_TASK_TAG(1);
-      MX_NET_BUFFER_SET_PAYLOAD_SIZE(netb, sheader.len);
-      mx_wifi_hci_input(netb);
-      netb = NULL;
-    }
-    else
-    {
-      NET_PERF_TASK_TAG(2);
-    }
+    UNLOCK(SpiTxLock);
   }
 }
 
@@ -563,6 +573,7 @@ void process_txrx_poll(uint32_t timeout)
 #ifndef MX_WIFI_BARE_OS_H
 static void mx_wifi_spi_txrx_task(THREAD_CONTEXT_TYPE argument)
 {
+  (void)argument;
 
   SPITxRxTaskQuitFlag = false;
 
@@ -600,6 +611,7 @@ static int8_t mx_wifi_spi_txrx_start(void)
   }
   else
   {
+    /* Notify SPI ready. */
     /* De-select the SPI slave. */
     MX_WIFI_SPI_CS_HIGH();
   }
@@ -630,13 +642,15 @@ static int8_t mx_wifi_spi_txrx_stop(void)
   SEM_DEINIT(SpiTxRxSem);
   SEM_DEINIT(SpiFlowRiseSem);
   LOCK_DEINIT(SpiTxLock);
+
   return 0;
 }
 
 
 int32_t mxwifi_probe(void **ll_drv_context)
 {
-  int32_t ret;
+  int32_t ret = -1;
+
   if (MX_WIFI_RegisterBusIO(&MxWifiObj,
                             MX_WIFI_SPI_Init,
                             MX_WIFI_SPI_DeInit,
@@ -644,12 +658,11 @@ int32_t mxwifi_probe(void **ll_drv_context)
                             MX_WIFI_SPI_Write,
                             MX_WIFI_SPI_Read) == MX_WIFI_STATUS_OK)
   {
-    *ll_drv_context = &MxWifiObj;
+    if (NULL != ll_drv_context)
+    {
+      *ll_drv_context = &MxWifiObj;
+    }
     ret = 0;
-  }
-  else
-  {
-    ret = -1;
   }
 
   return ret;

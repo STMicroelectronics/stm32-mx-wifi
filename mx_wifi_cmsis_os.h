@@ -2,7 +2,7 @@
   ******************************************************************************
   * @file    mx_wifi_cmsis_os.h
   * @author  MCD Application Team
-  * @brief   Header for mx_wifi_conf module
+  * @brief   CMSIS OS Header for mx_wifi_conf module
   ******************************************************************************
   * @attention
   *
@@ -29,7 +29,7 @@ extern "C" {
 #include <stdbool.h>
 #include "cmsis_os.h"
 
-/* memory management ---------------------------------------------------------*/
+/* Memory management ---------------------------------------------------------*/
 #ifndef MX_WIFI_MALLOC
 #define MX_WIFI_MALLOC pvPortMalloc
 #endif /* MX_WIFI_MALLOC */
@@ -45,14 +45,19 @@ extern "C" {
 typedef struct pbuf mx_buf_t;
 
 #define MX_NET_BUFFER_ALLOC(len)                  pbuf_alloc(PBUF_RAW, (len), PBUF_POOL)
+
 #define MX_NET_BUFFER_FREE(p)                     pbuf_free((p))
+
 #define MX_NET_BUFFER_HIDE_HEADER(p, n)           pbuf_header((p), (int16_t) - (n))
+
 #define MX_NET_BUFFER_PAYLOAD(p)                  (p)->payload
+
 #define MX_NET_BUFFER_SET_PAYLOAD_SIZE(p, size)   pbuf_realloc((p), (size))
+
 #define MX_NET_BUFFER_GET_PAYLOAD_SIZE(p)         (p)->len
 
 #else
-/* Assume that OS is not used when bypass is disabled */
+
 typedef struct mx_buf
 {
   uint32_t len;
@@ -69,8 +74,8 @@ static inline mx_buf_t *mx_buf_alloc(uint32_t len)
     p->header_len = 0;
   }
   return p;
-
 }
+
 #define MX_NET_BUFFER_ALLOC(len)                  mx_buf_alloc(len)
 #define MX_NET_BUFFER_FREE(p)                     MX_WIFI_FREE(p)
 #define MX_NET_BUFFER_HIDE_HEADER(p, n)           (p)->header_len += (n)
@@ -85,63 +90,105 @@ static inline mx_buf_t *mx_buf_alloc(uint32_t len)
 #define OSPRIORITYABOVENORMAL                     osPriorityAboveNormal
 #define OSPRIORITYREALTIME                        osPriorityRealtime
 
-#define MX_ASSERT(a)                              while((a) != true) {}
+#define MX_ASSERT(A)     \
+  do                     \
+  {                      \
+    ((void)0);           \
+  } while((A) != true)     /* ; */
 
-#define LOCK_DECLARE(A)                           osMutexId A
+
+#define LOCK_DECLARE(A)                                   \
+  osMutexId /*(*/ A /*)*/
 
 #if (osCMSIS < 0x20000U)
-#define LOCK_INIT(A)                              osMutexDef(MUTEX); A = osMutexCreate(osMutex(MUTEX))
+#define LOCK_INIT(A)                                      \
+  osMutexDef(MUTEX); (A) = osMutexCreate(osMutex(MUTEX))
 
 #else
-#define LOCK_INIT(A)                              osMutexDef(MUTEX); A = osMutexNew(osMutex(MUTEX))
+#define LOCK_INIT(A)                                      \
+  osMutexDef(MUTEX); (A) = osMutexNew(osMutex(MUTEX))
 #endif /* (osCMSIS < 0x20000U) */
 
-#define LOCK_DEINIT(A)                            osMutexDelete((A))
-#define LOCK(A)                                   if (osMutexWait((A), osWaitForever) != osOK) {while(1){};}
-#define UNLOCK(A)                                 if (osMutexRelease((A))             != osOK) {while(1){};}
+#define LOCK_DEINIT(A)                                    \
+  osMutexDelete((A))
 
-#define SEM_DECLARE(A)                            osSemaphoreId A
-#define SEMAPHORE_DEF(NAME)                       osSemaphoreDef(NAME)
-#define SEMAPHORE(NAME)                           osSemaphore(NAME)
+#define LOCK(A)                                           \
+  if (osMutexWait((A), osWaitForever) != osOK) {while(true){};}
+
+#define UNLOCK(A)                                         \
+  if (osMutexRelease((A)) != osOK) {while(true){};}
+
+#define SEM_DECLARE(A)                                    \
+  osSemaphoreId /*(*/ A /*)*/
+
+#define SEMAPHORE_DEF(NAME)                               \
+  osSemaphoreDef(NAME)
+
+#define SEMAPHORE(NAME)                                   \
+  osSemaphore(NAME)
 
 #if (osCMSIS < 0x20000U)
-#define SEM_INIT(A, COUNT) \
-  SEMAPHORE_DEF(__LINE__); \
-  A = osSemaphoreCreate(SEMAPHORE(__LINE__), COUNT); \
-  for(uint32_t jj = 0; jj < COUNT; jj++) { \
-    osSemaphoreWait(A, 0); \
+#define SEM_INIT(A, COUNT)                               \
+  SEMAPHORE_DEF(__LINE__);                               \
+  (A) = osSemaphoreCreate(SEMAPHORE(__LINE__), (COUNT)); \
+  for(uint32_t jj = 0; jj < (COUNT); jj++) {             \
+    (void)osSemaphoreWait((A), 0);                       \
   }
+
 #else
-#define SEM_INIT(A, COUNT) \
-  SEMAPHORE_DEF(__LINE__); \
-  A = osSemaphoreNew(COUNT,0 , SEMAPHORE(__LINE__))
+#define SEM_INIT(A, COUNT)                               \
+  SEMAPHORE_DEF(__LINE__);                               \
+  (A) = osSemaphoreNew((COUNT), 0, SEMAPHORE(__LINE__))
 #endif /* (osCMSIS < 0x20000U) */
 
-#define SEM_DEINIT(A)                             osSemaphoreDelete(A)
-#define SEM_SIGNAL(A)                             osSemaphoreRelease(A)
+#define SEM_DEINIT(A)                                    \
+  osSemaphoreDelete((A))
+
+#define SEM_SIGNAL(A)                                    \
+  osSemaphoreRelease((A))
+
 #if (osCMSIS < 0x20000U)
-#define SEM_WAIT(A, TIMEOUT, IDLE_FUNC)           osSemaphoreWait((A), (TIMEOUT))
+#define SEM_WAIT(A, TIMEOUT, IDLE_FUNC)                  \
+  osSemaphoreWait((A), (TIMEOUT))
+
 #else
-#define SEM_WAIT(A, TIMEOUT, IDLE_FUNC)           osSemaphoreAcquire((A), (TIMEOUT))
+#define SEM_WAIT(A, TIMEOUT, IDLE_FUNC)                  \
+  osSemaphoreAcquire((A), (TIMEOUT))
 #endif /* (osCMSIS < 0x20000U) */
 
 
-#define THREAD_DECLARE(A)                         osThreadId A
+#define THREAD_DECLARE(A)                                \
+  osThreadId /*(*/ A /*)*/
 
-#define THREAD_INIT(A, THREAD_FUNC, THREAD_CONTEXT, STACKSIZE, PRIORITY)   \
-  ((A) = thread_new(#A, THREAD_FUNC, THREAD_CONTEXT, STACKSIZE, PRIORITY), \
+#define THREAD_INIT(A, THREAD_FUNC, THREAD_CONTEXT, STACKSIZE, PRIORITY)           \
+  ((A) = thread_new(#A, (THREAD_FUNC), (THREAD_CONTEXT), (STACKSIZE), (PRIORITY)), \
    ((A) != NULL) ? osOK : osErrorOS)
 
-#define THREAD_DEINIT(A)                          osThreadTerminate(A)
-#define THREAD_TERMINATE()                        (void)osThreadTerminate(NULL)
-#define THREAD_CONTEXT_TYPE                       void const*
+#if (osCMSIS < 0x20000U)
+#define THREAD_DEINIT(A)                            \
+  thread_exit(&(A))
+#else
+#define THREAD_DEINIT(A)                            \
+  osThreadTerminate(A)
+#endif /* (osCMSIS < 0x20000U) */
+
+#if (osCMSIS < 0x20000U)
+#define THREAD_TERMINATE()
+#else
+#define THREAD_TERMINATE()                          \
+  osThreadExit()
+#endif /* (osCMSIS < 0x20000U) */
+
+#define THREAD_CONTEXT_TYPE                         \
+  void const *
 
 
-#define FIFO_DECLARE(QUEUE)                       osMessageQId QUEUE
+#define FIFO_DECLARE(QUEUE)                         \
+  osMessageQId /*(*/ QUEUE /*)*/
 
 #if (osCMSIS < 0x20000U)
 #define FIFO_INIT(QUEUE, QSIZE)                     \
-  osMessageQDef(QUEUE, QSIZE, void *);              \
+  osMessageQDef(/*(*/ QUEUE /*)*/, (QSIZE), void *);\
   QUEUE = osMessageCreate(osMessageQ(QUEUE), NULL)
 #else
 #define FIFO_INIT(QUEUE, QSIZE)                     \
@@ -149,26 +196,37 @@ static inline mx_buf_t *mx_buf_alloc(uint32_t len)
 #endif /* (osCMSIS < 0x20000U) */
 
 #if (osCMSIS < 0x20000U)
-#define FIFO_PUSH(QUEUE,VALUE,TIMEOUT,IDLE_FUNC)  osMessagePut((QUEUE), (uint32_t) (VALUE), (TIMEOUT))
+#define FIFO_PUSH(QUEUE, VALUE, TIMEOUT, IDLE_FUNC) \
+  osMessagePut((QUEUE), (uint32_t) (VALUE), (TIMEOUT))
 #else
-#define FIFO_PUSH(QUEUE,VALUE,TIMEOUT,IDLE_FUNC)  osMessageQueuePut((QUEUE), (void const*) &VALUE, 0, (TIMEOUT))
+#define FIFO_PUSH(QUEUE, VALUE, TIMEOUT, IDLE_FUNC) \
+  osMessageQueuePut((QUEUE), (void const*) &VALUE, 0, (TIMEOUT))
 #endif /* (osCMSIS < 0x20000U) */
 
-
-#define FIFO_POP(QUEUE, TIMEOUT, IDLE_FUNC)       (void*) fifo_get((QUEUE), (TIMEOUT))
+#define FIFO_POP(QUEUE, TIMEOUT, IDLE_FUNC)         \
+  (void*)fifo_get((QUEUE), (TIMEOUT))
 
 #if (osCMSIS < 0x20000U)
-#define FIFO_DEINIT(QUEUE)                        osMessageDelete((QUEUE))
+#define FIFO_DEINIT(QUEUE)                          \
+  osMessageDelete((QUEUE))
 #else
-#define FIFO_DEINIT(QUEUE)                        osMessageQueueDelete((QUEUE))
+#define FIFO_DEINIT(QUEUE)                          \
+  osMessageQueueDelete((QUEUE))
 #endif /* (osCMSIS < 0x20000U) */
 
-#define WAIT_FOREVER                              osWaitForever
-#define SEM_OK                                    osOK
-#define THREAD_OK                                 osOK
-#define QUEUE_OK                                  osOK
-#define FIFO_OK                                   osOK
-#define DELAY_MS(N)                               osDelay((N))
+
+#define WAIT_FOREVER   \
+  osWaitForever
+#define SEM_OK         \
+  osOK
+#define THREAD_OK      \
+  osOK
+#define QUEUE_OK       \
+  osOK
+#define FIFO_OK        \
+  osOK
+#define DELAY_MS(N)    \
+  osDelay((N))
 
 
 /**
@@ -190,6 +248,10 @@ void *fifo_get(osMessageQId queue, uint32_t timeout);
   * @retval thread id of the new thread, NULL if failed.
   */
 osThreadId thread_new(const char *name, void (*thread)(void const *), void *arg, int stacksize, int prio);
+
+#if (osCMSIS < 0x20000U)
+void thread_exit(volatile osThreadId *thread_id);
+#endif /* (osCMSIS < 0x20000U) */
 
 #ifdef __cplusplus
 }

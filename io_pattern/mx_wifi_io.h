@@ -32,7 +32,7 @@ extern "C" {
 /**
   * @brief  Create internal connections to the had hoc bus.
   * @param  ll_drv_context
-  * @retval None
+  * @retval 0 in case of success
   */
 int32_t mxwifi_probe(void **ll_drv_context);
 
@@ -43,7 +43,7 @@ MX_WIFIObject_t *wifi_obj_get(void);
 void process_txrx_poll(uint32_t timeout);
 
 /* The handler for the WiFi module SPI interrupts (NOTIFY, FLOW). */
-void mxchip_WIFI_ISR(uint16_t pin);
+void mxchip_WIFI_ISR(uint16_t isr_source);
 
 /* The handler of SPI transfer with the WiFi module. */
 void HAL_SPI_TransferCallback(void *hspi);
