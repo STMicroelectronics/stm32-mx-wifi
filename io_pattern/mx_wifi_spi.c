@@ -118,7 +118,7 @@ typedef struct _spi_header
 extern SPI_HandleTypeDef MXCHIP_SPI;
 
 /* Private variables ---------------------------------------------------------*/
-static MX_WIFIObject_t MxWifiObj = {0};
+static MX_WIFIObject_t MxWifiObj;
 static SPI_HandleTypeDef *const HSpiMX = &MXCHIP_SPI;
 
 static LOCK_DECLARE(SpiTxLock);
@@ -148,13 +148,13 @@ static int8_t MX_WIFI_SPI_Init(uint16_t mode);
 static int8_t MX_WIFI_SPI_DeInit(void);
 
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
 static THREAD_DECLARE(MX_WIFI_TxRxThreadId);
 
 static __IO bool SPITxRxTaskQuitFlag = false;
 
 static void mx_wifi_spi_txrx_task(THREAD_CONTEXT_TYPE argument);
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
 
 static void MX_WIFI_IO_DELAY(uint32_t ms)
@@ -300,7 +300,7 @@ static HAL_StatusTypeDef TransmitReceive(SPI_HandleTypeDef *hspi, uint8_t *txdat
 {
   HAL_StatusTypeDef ret;
 
-  DEBUG_LOG(("\n%s()> %"PRIu32"\n"), __FUNCTION__, (uint32_t)datalen);
+  DEBUG_LOG("\n%s()> %" PRIu32 "\n", __FUNCTION__, (uint32_t)datalen);
 
 #if 0
   for (uint32_t i = 0; i < datalen; i++)
@@ -409,8 +409,8 @@ void process_txrx_poll(uint32_t timeout)
 
     LOCK(SpiTxLock);
     {
-      spi_header_t mheader = {0};
-      spi_header_t sheader = {0};
+      spi_header_t mheader = {0,0,0,{0}};
+      spi_header_t sheader = {0,0,0,{0}};
       uint8_t *txdata = NULL;
       bool is_continue = true;
 
@@ -425,13 +425,13 @@ void process_txrx_poll(uint32_t timeout)
 
           /* There nothing to do with the SPI. */
           /* Free allocated buffer, due to end of life being requested for the hosting thread. */
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
           if (SPITxRxTaskQuitFlag == true)
           {
             MX_NET_BUFFER_FREE(netb);
             netb = NULL;
           }
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
         }
       }
       else
@@ -570,7 +570,7 @@ void process_txrx_poll(uint32_t timeout)
 }
 
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
 static void mx_wifi_spi_txrx_task(THREAD_CONTEXT_TYPE argument)
 {
   (void)argument;
@@ -590,7 +590,7 @@ static void mx_wifi_spi_txrx_task(THREAD_CONTEXT_TYPE argument)
   /* Delete the Thread. */
   THREAD_DEINIT(MX_WIFI_TxRxThreadId);
 }
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
 
 static int8_t mx_wifi_spi_txrx_start(void)
@@ -621,21 +621,21 @@ static int8_t mx_wifi_spi_txrx_start(void)
 
 static int8_t mx_wifi_spi_txrx_stop(void)
 {
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
   /* Set thread quit flag to TRUE. */
   SPITxRxTaskQuitFlag = true;
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
   /* Wake up the thread if it's sleeping. */
   SEM_SIGNAL(SpiTxRxSem);
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
   /* Wait for the thread to terminate. */
   while (SPITxRxTaskQuitFlag == true)
   {
     DELAY_MS(500);
   }
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
   /* Delete the Thread (depends on implementation). */
   THREAD_DEINIT(MX_WIFI_TxRxThreadId);

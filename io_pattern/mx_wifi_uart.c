@@ -96,13 +96,13 @@ static int8_t MX_WIFI_UART_Init(uint16_t mode);
 static int8_t MX_WIFI_UART_DeInit(void);
 
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
 static THREAD_DECLARE(MX_WIFI_RxThreadId);
 
 static __IO bool UARTRxTaskQuitFlag = false;
 
 static void mx_wifi_uart_rx_task(THREAD_CONTEXT_TYPE argument);
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
 
 static void MX_WIFI_IO_DELAY(uint32_t ms)
@@ -156,21 +156,21 @@ static int8_t MX_WIFI_UART_DeInit(void)
 {
   int8_t rc = 0;
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
   /* Set thread quit flag to TRUE. */
   UARTRxTaskQuitFlag = true;
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
   /* Wake up the thread if it's sleeping. */
   SEM_SIGNAL(UartRxSem);
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
   /* Wait for the thread to terminate. */
   while (UARTRxTaskQuitFlag == true)
   {
     DELAY_MS(500);
   }
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
   /* Delete the Thread (depends on implementation). */
   THREAD_DEINIT(MX_WIFI_RxThreadId);
@@ -285,7 +285,7 @@ void process_txrx_poll(uint32_t timeout)
 }
 
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
 static void mx_wifi_uart_rx_task(THREAD_CONTEXT_TYPE argument)
 {
   (void)argument;
@@ -305,7 +305,7 @@ static void mx_wifi_uart_rx_task(THREAD_CONTEXT_TYPE argument)
   /* Delete the Thread. */
   THREAD_DEINIT(MX_WIFI_RxThreadId);
 }
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
 
 /**

@@ -42,7 +42,7 @@ static void void_strncpy(char *Destination, const char *Source, size_t Num);
 
 /* Ensures that the last character of DEST is not overwritten, implying that it is already set to '\0'. */
 #define MX_WIFI_STRNCPY(DEST, SRC)                                         \
-  do                                                                         \
+  do                                                                       \
   {                                                                        \
     void_strncpy((char *)(DEST), (const char *)(SRC), sizeof((DEST)) - 1); \
   } while(false) /* ; */
@@ -51,16 +51,16 @@ static void void_strncpy(char *Destination, const char *Source, size_t Num);
 
 MX_STAT_DECLARE();
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
 static __IO bool RecvThreadQuitFlag;
 static THREAD_DECLARE(MX_WIFI_RecvThreadId);
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
 
 /* Private functions ---------------------------------------------------------*/
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
 static void _MX_WIFI_RecvThread(THREAD_CONTEXT_TYPE context);
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
 #if (MX_WIFI_NETWORK_BYPASS_MODE == 0)
 /* Manage un-packed to packed according the given IP v4 socket address structure. */
@@ -144,7 +144,7 @@ MX_WIFI_STATUS_T MX_WIFI_SetTimeout(MX_WIFIObject_t *Obj, uint32_t Timeout)
  */
 
 
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
 /**
   * @brief                  WiFi receive thread for RTOS
   * @param  context         thread arguments
@@ -168,7 +168,7 @@ static void _MX_WIFI_RecvThread(THREAD_CONTEXT_TYPE context)
   /* Delete the Thread. */
   THREAD_DEINIT(MX_WIFI_RecvThreadId);
 }
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
 
 MX_WIFI_STATUS_T MX_WIFI_Init(MX_WIFIObject_t *Obj)
@@ -279,7 +279,7 @@ MX_WIFI_STATUS_T MX_WIFI_DeInit(MX_WIFIObject_t *Obj)
   {
     if (Obj->Runtime.interfaces == 1u)
     {
-#ifndef MX_WIFI_BARE_OS_H
+#ifndef MX_WIFI_BARE_OS
       /* Set the thread quit flag to TRUE. */
       RecvThreadQuitFlag = true;
 
@@ -288,7 +288,7 @@ MX_WIFI_STATUS_T MX_WIFI_DeInit(MX_WIFIObject_t *Obj)
       {
         DELAY_MS(50);
       }
-#endif /* MX_WIFI_BARE_OS_H */
+#endif /* MX_WIFI_BARE_OS */
 
       /* Delete the thread (depends on implementation). */
       THREAD_DEINIT(MX_WIFI_RecvThreadId);
@@ -563,7 +563,7 @@ MX_WIFI_STATUS_T MX_WIFI_Connect(MX_WIFIObject_t *Obj, const mx_char_t *SSID,
     }
     else
     {
-      wifi_connect_cparams_t cp = {0};
+      wifi_connect_cparams_t cp = {{0},{0},0,0,0,{{0},0,0},{{0},{0},{0},{0}}};
       const uint16_t cp_size = (uint16_t)(sizeof(cp));
       int32_t status = MIPC_CODE_ERROR;
       uint16_t status_size = (uint16_t)sizeof(status);
@@ -574,7 +574,7 @@ MX_WIFI_STATUS_T MX_WIFI_Connect(MX_WIFIObject_t *Obj, const mx_char_t *SSID,
 
       if ((uint8_t)0 == Obj->NetSettings.DHCP_IsEnabled)
       {
-        mwifi_ip_attr_t ip_attr = {0};
+        mwifi_ip_attr_t ip_attr = {{0},{0},{0},{0}};
         {
           mx_ip_addr_t ip_addr = {0};
           (void)memcpy(&ip_addr, Obj->NetSettings.IP_Addr, sizeof(ip_addr));
@@ -633,7 +633,7 @@ MX_WIFI_STATUS_T MX_WIFI_Connect_Adv(MX_WIFIObject_t *Obj, const mx_char_t *SSID
     }
     else
     {
-      wifi_connect_cparams_t cp = {0};
+      wifi_connect_cparams_t cp = {{0},{0},0,0,0,{{0},0,0},{{0},{0},{0},{0}}};
       const uint16_t cp_size = (uint16_t)(sizeof(cp));
       int32_t status = MIPC_CODE_ERROR;
       uint16_t status_size = (uint16_t)sizeof(status);
@@ -742,7 +742,7 @@ MX_WIFI_STATUS_T MX_WIFI_EAP_Connect(MX_WIFIObject_t *Obj, const char *SSID,
     }
     else
     {
-      wifi_eap_connect_cparams_t connect_cp = {0};
+      wifi_eap_connect_cparams_t connect_cp = {{0},{0},{0},0,{0,NULL,NULL,NULL},0,{{0},{0},{0},{0}}};
       const uint16_t connect_cp_size = (uint16_t)(sizeof(connect_cp));
 
       ret = MX_WIFI_STATUS_OK;  /* ret set ERROR if any step error */
@@ -904,7 +904,7 @@ int8_t MX_WIFI_IsConnected(MX_WIFIObject_t *Obj)
 
   if (NULL != Obj)
   {
-    wifi_get_linkinof_rparams_t rparams = {0};
+    wifi_get_linkinof_rparams_t rparams = {0,{0,0,{0},{0},{0},0,0}};
     uint16_t rparams_size = (uint16_t)sizeof(rparams);
 
     rparams.status = MIPC_CODE_ERROR;
@@ -934,7 +934,7 @@ MX_WIFI_STATUS_T MX_WIFI_GetIPAddress(MX_WIFIObject_t *Obj, uint8_t *IpAddr, mwi
 
   if (NULL != Obj)
   {
-    wifi_get_ip_rparams_t rp = {0};
+    wifi_get_ip_rparams_t rp = {0,{{0},{0},{0},{0}}};
     uint16_t rp_size = (uint16_t)sizeof(rp);
     uint8_t interface_num = ((mwifi_if_t)MC_SOFTAP == WifiMode) ? 0 : 1;
     const uint16_t interface_num_size = (uint16_t)(sizeof(interface_num));
@@ -980,9 +980,9 @@ MX_WIFI_STATUS_T MX_WIFI_GetIP6Address(MX_WIFIObject_t *Obj, uint8_t *IpAddr6, i
 
   if ((NULL != Obj) && (NULL != IpAddr6) && (AddrSlot < 3) && (AddrSlot >= 0))
   {
-    wifi_get_ip6_addr_cprams_t cp = {0};
+    wifi_get_ip6_addr_cprams_t cp = {0,0};
     const uint16_t cp_size = (uint16_t)(sizeof(cp));
-    wifi_get_ip6_addr_rprams_t rp = {0};
+    wifi_get_ip6_addr_rprams_t rp = {0,{0}};
     uint16_t rp_size = (uint16_t)sizeof(rp);
 
     cp.addr_num = (uint8_t)AddrSlot;
@@ -1012,7 +1012,7 @@ int32_t MX_WIFI_GetIP6AddressState(MX_WIFIObject_t *Obj, int32_t AddrSlot, mwifi
 
   if (NULL != Obj)
   {
-    wifi_get_ip6_state_cprams_t cp = {0};
+    wifi_get_ip6_state_cprams_t cp = {0,0};
     const uint16_t cp_size = (uint16_t)(sizeof(cp));
     wifi_get_ip6_state_rprams_t rp = {0};
     uint16_t rp_size = (uint16_t)sizeof(rp);
@@ -1044,7 +1044,7 @@ MX_WIFI_STATUS_T MX_WIFI_StartAP(MX_WIFIObject_t *Obj, MX_WIFI_APSettings_t *ApS
 
   if ((NULL != Obj) && (NULL != ApSettings))
   {
-    wifi_softap_start_cparams_t cp = {0};
+    wifi_softap_start_cparams_t cp = {{0},{0},0,{{0},{0},{0},{0}}};
     const uint16_t cp_size = (uint16_t)(sizeof(cp));
     int32_t status = MIPC_CODE_ERROR;
     uint16_t status_size = (uint16_t)sizeof(status);

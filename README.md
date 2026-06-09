@@ -1,6 +1,6 @@
 # BSP MXCHIP Wi-Fi Component
 
-![latest tag](https://img.shields.io/github/v/tag/STMicroelectronics/mx_wifi.svg?color=brightgreen)
+![tag](https://img.shields.io/badge/tag-v2.3.5-brightgreen.svg)
 
 ## Summary
 

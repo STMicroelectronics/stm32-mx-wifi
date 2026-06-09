@@ -175,8 +175,7 @@ typedef enum
   MX_SO_RCVTIMEO           = 0x1006,     /**< Recv timeout in block mode. block 1 second in default mode. */
   MX_SO_ERROR              = 0x1007,     /**< Get socket error number. */
   MX_SO_TYPE               = 0x1008,     /**< Get socket type. */
-  MX_SO_NO_CHECK           = 0x100A,     /**< Don't create UDP checksum. */
-  MX_SO_BINDTODEVICE       = 0x100B      /* bind to device */
+  MX_SO_NO_CHECK           = 0x100A      /**< Don't create UDP checksum. */
 } MX_SOCK_OPT_VAL;
 
 

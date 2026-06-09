@@ -233,7 +233,7 @@ mx_char_t *mx_ntoa(const mx_ip_addr_t *addr)
 
   for (uint8_t n = 0; n < (uint8_t) 4; n++)
   {
-    mx_char_t inv[3];
+    mx_char_t inv[3] = {0};
     uint8_t i = 0;
     uint8_t val = ap[n];
     do
@@ -242,7 +242,7 @@ mx_char_t *mx_ntoa(const mx_ip_addr_t *addr)
       val /=  10U;
       inv[i] = (mx_char_t)'0' + rem;
       i++;
-    } while (val != 0U);
+    } while ((val != 0U) && (i < (sizeof(inv)/sizeof(inv[0]))));
 
     while (i != 0U)
     {

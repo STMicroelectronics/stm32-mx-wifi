@@ -151,7 +151,7 @@ static void mipc_event(mx_buf_t *netbuf)
         }
         else
         {
-          DEBUG_LOG("response req_id: 0x%08"PRIx32" not match pending req_id: 0x%08" PRIx32 "!\n",
+          DEBUG_LOG("response req_id: 0x%08" PRIx32 " not match pending req_id: 0x%08" PRIx32 "!\n",
                     req_id, PendingRequest.req_id);
         }
         mx_wifi_hci_free(netbuf);

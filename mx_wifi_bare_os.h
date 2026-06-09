@@ -20,6 +20,11 @@
 #ifndef MX_WIFI_BARE_OS_H
 #define MX_WIFI_BARE_OS_H
 
+/* Bare OS selection symbol for compilation switches */
+#ifndef MX_WIFI_BARE_OS
+#define MX_WIFI_BARE_OS
+#endif /* MX_WIFI_BARE_OS */
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */

@@ -29,7 +29,7 @@ extern "C" {
 #include "mx_wifi.h"
 
 /* Exported Constants --------------------------------------------------------*/
-#define MX_API_VERSION      ("2.3.4")
+#define MX_API_VERSION      ("2.3.5")
 
 /**
   * @brief IPC error code
